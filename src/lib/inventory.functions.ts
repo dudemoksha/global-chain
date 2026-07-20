@@ -46,10 +46,8 @@ export const listInventory = createServerFn({ method: "GET" })
     }));
   });
 
-async function generateSku(
-  supabase: ReturnType<typeof requireSupabaseAuth> extends never ? never : any, // eslint-disable-line @typescript-eslint/no-explicit-any
-  userId: string,
-): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function generateSku(supabase: any, userId: string): Promise<string> {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   for (let attempt = 0; attempt < 6; attempt++) {
     let code = "SKU-";
