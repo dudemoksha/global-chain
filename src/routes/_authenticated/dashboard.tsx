@@ -791,11 +791,9 @@ function AdminOverview({
           <div className="rounded-md border border-border bg-card p-6">
             <div className="mono-label">Quick actions</div>
             <div className="mt-4 flex flex-col gap-2">
-              <ActionLink to="/admin/requests" label="Approval queue" />
-              <ActionLink to="/admin/companies" label="Manage companies" />
-              <ActionLink to="/admin/audit" label="Audit log" />
               <ActionLink to="/analytics" label="Platform analytics" />
             </div>
+
           </div>
 
           <div className="rounded-md border border-border bg-card p-6">
@@ -842,13 +840,7 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
             {queue.length} companies queued for the trust desk.
           </div>
         </div>
-        <Link
-          to="/admin/requests"
-          className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-90"
-        >
-          Open review desk
-        </Link>
-      </div>
+
       {queue.length === 0 ? (
         <div className="p-10 text-center text-[13px] text-muted-foreground">
           Queue is clear. New registrations will appear here.
@@ -902,13 +894,7 @@ function AdminCompanies({ profiles }: { profiles: any[] }) {
             {approved.length} approved companies on Global-Chain.
           </div>
         </div>
-        <Link
-          to="/admin/companies"
-          className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
-        >
-          Full management →
-        </Link>
-      </div>
+
       {approved.length === 0 ? (
         <div className="p-10 text-center text-[13px] text-muted-foreground">
           No approved companies yet.
@@ -962,13 +948,8 @@ function AdminActivity({ profiles }: { profiles: any[] }) {
       <div className="rounded-md border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="mono-label">Latest registrations</div>
-          <Link
-            to="/admin/audit"
-            className="text-[12px] font-medium text-primary hover:underline"
-          >
-            Full audit log →
-          </Link>
         </div>
+
         <ul className="divide-y divide-border">
           {recent.map((p) => {
             const status = p.is_approved
