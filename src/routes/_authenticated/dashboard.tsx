@@ -2,12 +2,22 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { Mark } from "@/components/site/mark";
 import { getMyProfile } from "@/lib/profile.functions";
+import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 const meQuery = queryOptions({
   queryKey: ["me"],
   queryFn: () => getMyProfile(),
 });
+const suppliersQuery = queryOptions({
+  queryKey: ["suppliers", "mine"],
+  queryFn: () => listMySuppliers(),
+});
+const graphQuery = queryOptions({
+  queryKey: ["suppliers", "graph"],
+  queryFn: () => getMySupplyGraph(),
+});
+
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard · Global-Chain" }, { name: "robots", content: "noindex" }] }),
