@@ -14,7 +14,6 @@ const USER_NAV: NavItem[] = [
   { to: "/suppliers", label: "Suppliers" },
   { to: "/customers", label: "Customers" },
   { to: "/requests", label: "Requests" },
-  { to: "/uploads", label: "Uploads" },
   { to: "/assistant", label: "Assistant" },
 ];
 

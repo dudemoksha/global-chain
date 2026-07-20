@@ -13,7 +13,6 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedUploadsRouteImport } from './routes/_authenticated/uploads'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedSimulationRouteImport } from './routes/_authenticated/simulation'
 import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
@@ -45,11 +44,6 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedUploadsRoute = AuthenticatedUploadsRouteImport.update({
-  id: '/uploads',
-  path: '/uploads',
-  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSuppliersRoute = AuthenticatedSuppliersRouteImport.update({
   id: '/suppliers',
@@ -128,7 +122,6 @@ export interface FileRoutesByFullPath {
   '/signals': typeof AuthenticatedSignalsRoute
   '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
-  '/uploads': typeof AuthenticatedUploadsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -146,7 +139,6 @@ export interface FileRoutesByTo {
   '/signals': typeof AuthenticatedSignalsRoute
   '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
-  '/uploads': typeof AuthenticatedUploadsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -166,7 +158,6 @@ export interface FileRoutesById {
   '/_authenticated/signals': typeof AuthenticatedSignalsRoute
   '/_authenticated/simulation': typeof AuthenticatedSimulationRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
-  '/_authenticated/uploads': typeof AuthenticatedUploadsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -186,7 +177,6 @@ export interface FileRouteTypes {
     | '/signals'
     | '/simulation'
     | '/suppliers'
-    | '/uploads'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -204,7 +194,6 @@ export interface FileRouteTypes {
     | '/signals'
     | '/simulation'
     | '/suppliers'
-    | '/uploads'
   id:
     | '__root__'
     | '/'
@@ -223,7 +212,6 @@ export interface FileRouteTypes {
     | '/_authenticated/signals'
     | '/_authenticated/simulation'
     | '/_authenticated/suppliers'
-    | '/_authenticated/uploads'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -262,13 +250,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/uploads': {
-      id: '/_authenticated/uploads'
-      path: '/uploads'
-      fullPath: '/uploads'
-      preLoaderRoute: typeof AuthenticatedUploadsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/suppliers': {
       id: '/_authenticated/suppliers'
@@ -370,7 +351,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
   AuthenticatedSimulationRoute: typeof AuthenticatedSimulationRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
-  AuthenticatedUploadsRoute: typeof AuthenticatedUploadsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -386,7 +366,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
   AuthenticatedSimulationRoute: AuthenticatedSimulationRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
-  AuthenticatedUploadsRoute: AuthenticatedUploadsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
