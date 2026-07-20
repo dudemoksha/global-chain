@@ -29,8 +29,8 @@ function FactoriesPage() {
   const [open, setOpen] = useState(false);
 
   const add = useMutation({
-    mutationFn: (input: Parameters<typeof addFactory>[0]["data"]) =>
-      addFactory({ data: input }),
+    mutationFn: (input: Parameters<typeof addFactory>[0] extends { data: infer T } ? T : never) =>
+      addFactory({ data: input as any }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["factories"] });
       setOpen(false);
