@@ -168,21 +168,29 @@ function AppShell({
           <nav className="hidden items-center gap-6 md:flex">
             <Link
               to="/dashboard"
-              className="text-[13px] font-medium text-foreground"
-              activeProps={{ className: "text-primary" }}
+              className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
+              activeProps={{ className: "!text-primary" }}
             >
               Dashboard
+            </Link>
+            <Link
+              to="/suppliers"
+              className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
+              activeProps={{ className: "!text-primary" }}
+            >
+              Suppliers
             </Link>
             {isAdmin && (
               <Link
                 to="/admin/requests"
                 className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-                activeProps={{ className: "text-primary" }}
+                activeProps={{ className: "!text-primary" }}
               >
                 Admin
               </Link>
             )}
           </nav>
+
           <div className="flex items-center gap-3">
             <span className="mono-label hidden sm:inline">{email}</span>
             <button
