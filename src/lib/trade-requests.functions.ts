@@ -4,21 +4,53 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const directionEnum = z.enum(["buy", "sell"]);
 
-/** Search public organizations by prefix; returns up to 10. */
+/** Search registered organisations (approved users' companies) by name; returns up to 10. */
 export const searchOrganizations = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) =>
     z.object({ q: z.string().trim().min(1).max(120) }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { data: rows, error } = await supabase
-      .from("organizations")
-      .select("id, display_name, country, industry, name_norm")
-      .ilike("display_name", `%${data.q}%`)
+    const { userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Source of truth: approved users' profiles (a supplier/customer must be a real user)
+    const { data: profiles, error: pErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, legal_name, hq_country, industry")
+      .eq("is_approved", true)
+      .neq("id", userId)
+      .ilike("legal_name", `%${data.q}%`)
+      .not("legal_name", "is", null)
       .limit(10);
-    if (error) throw error;
-    return rows ?? [];
+    if (pErr) throw pErr;
+
+    const results: Array<{
+      id: string;
+      display_name: string;
+      country: string;
+      industry: string;
+    }> = [];
+
+    for (const p of profiles ?? []) {
+      const name = (p.legal_name ?? "").trim();
+      if (!name) continue;
+      const { data: orgId, error: uErr } = await supabaseAdmin.rpc("upsert_organization", {
+        _name: name,
+        _country: p.hq_country ?? "",
+        _industry: p.industry ?? "",
+      });
+      if (uErr) continue;
+      if (!orgId) continue;
+      if (results.some((r) => r.id === orgId)) continue;
+      results.push({
+        id: orgId as string,
+        display_name: name,
+        country: p.hq_country ?? "",
+        industry: p.industry ?? "",
+      });
+    }
+    return results;
   });
 
 /** Send a trade request to an organization. Direction: buy = "I want to buy from them". */
