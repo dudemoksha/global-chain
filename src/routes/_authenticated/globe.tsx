@@ -195,11 +195,9 @@ function GlobeBody({ selfName }: { selfName: string }) {
         <div className="relative overflow-hidden rounded-md border border-border bg-surface">
           <div className="h-[560px] w-full">
             <ClientOnly fallback={<GlobeSkeleton />}>
-              {() => (
-                <Suspense fallback={<GlobeSkeleton />}>
-                  <GlobeView nodes={nodes} arcs={arcs} onSelect={setFocus} />
-                </Suspense>
-              )}
+              <Suspense fallback={<GlobeSkeleton />}>
+                <GlobeView nodes={nodes} arcs={arcs} onSelect={setFocus} />
+              </Suspense>
             </ClientOnly>
           </div>
           <Legend />
