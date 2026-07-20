@@ -1,14 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import {
+  queryOptions,
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
+import { syncAlerts } from "@/lib/alerts.functions";
 import { generateSignals, severityColor, severityLabel } from "@/lib/risk-signals";
 import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 import { useRouter } from "@tanstack/react-router";
+
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const suppliersQuery = queryOptions({
@@ -43,7 +50,23 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { data } = useSuspenseQuery(meQuery);
   const router = useRouter();
+  const qc = useQueryClient();
   const { profile, isAdmin } = data;
+
+  // Auto-sync live risk → alerts once per session on dashboard mount.
+  const syncedRef = useRef(false);
+  const syncMut = useMutation({
+    mutationFn: () => syncAlerts(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+    },
+  });
+  useEffect(() => {
+    if (syncedRef.current) return;
+    if (!profile?.is_approved && !isAdmin) return;
+    syncedRef.current = true;
+    syncMut.mutate();
+  }, [profile?.is_approved, isAdmin, syncMut]);
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -63,6 +86,7 @@ function Dashboard() {
         <h1 className="mt-3 font-display text-[36px] font-medium leading-tight tracking-tight">
           Welcome, {profile.full_name || profile.work_email}.
         </h1>
+
         <p className="mt-3 max-w-2xl text-[14px] text-muted-foreground">
           <span className="text-foreground">{profile.legal_name}</span> is active
           on Global-Chain. Declare suppliers to unlock hidden downstream exposure

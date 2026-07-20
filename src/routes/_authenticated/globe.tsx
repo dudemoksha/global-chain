@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { ClientOnly } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
+import { getLiveEvents } from "@/lib/live-signals.functions";
 import { countryToLatLng, jitter } from "@/lib/country-coords";
 import { generateSignals, severityColor } from "@/lib/risk-signals";
+
 
 const GlobeView = lazy(() => import("@/components/site/globe-view"));
 
@@ -63,7 +65,14 @@ function GlobePage() {
 function GlobeBody({ selfName }: { selfName: string }) {
   const { data: suppliers } = useSuspenseQuery(suppliersQuery);
   const { data: graph } = useSuspenseQuery(graphQuery);
+  const liveQ = useQuery({
+    queryKey: ["live-events"],
+    queryFn: () => getLiveEvents(),
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
   const [focus, setFocus] = useState<string | null>(null);
+
 
   // Build node & arc datasets.
   const { nodes, arcs, signals } = useMemo(() => {
@@ -116,7 +125,21 @@ function GlobeBody({ selfName }: { selfName: string }) {
     const signalOrgs = Array.from(nodeMap.values())
       .filter((n) => n.tier !== 0)
       .map((n) => ({ id: n.id, name: n.name, country: n.country }));
-    const signals = generateSignals(signalOrgs);
+    const mockSignals = generateSignals(signalOrgs);
+
+    // Fold in live GDELT/USGS events touching these nodes.
+    const liveSignals = (liveQ.data ?? []).map((e) => ({
+      id: e.id,
+      country: e.country,
+      region: e.region,
+      kind: e.kind as ReturnType<typeof generateSignals>[number]["kind"],
+      severity: e.severity as ReturnType<typeof generateSignals>[number]["severity"],
+      headline: e.headline,
+      detail: e.detail,
+      affectsOrgIds: e.affectsOrgIds,
+      hoursAgo: e.hoursAgo,
+    }));
+    const signals = [...liveSignals, ...mockSignals];
 
     // Map impacted org → worst severity.
     const impactRank: Record<string, number> = {};
@@ -128,6 +151,7 @@ function GlobeBody({ selfName }: { selfName: string }) {
         if (sc > cur) impactRank[oid] = sc;
       });
     });
+
 
     const nodeList = Array.from(nodeMap.values()).map((n) => ({
       ...n,
@@ -173,7 +197,7 @@ function GlobeBody({ selfName }: { selfName: string }) {
       });
 
     return { nodes: nodeList, arcs, signals };
-  }, [suppliers, graph, selfName]);
+  }, [suppliers, graph, selfName, liveQ.data]);
 
   const focused = focus ? nodes.find((n) => n.id === focus) : null;
   const focusedSignals = focused
