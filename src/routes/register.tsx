@@ -1,6 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Mark } from "@/components/site/mark";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -25,6 +26,7 @@ type FormState = {
   fullName: string;
   workEmail: string;
   jobTitle: string;
+  password: string;
   note: string;
 };
 
@@ -36,6 +38,7 @@ const empty: FormState = {
   fullName: "",
   workEmail: "",
   jobTitle: "",
+  password: "",
   note: "",
 };
 
@@ -46,14 +49,23 @@ const steps = [
 ] as const;
 
 function RegisterPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(empty);
   const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const canNext = useMemo(() => {
     if (step === 0)
       return form.legalName && form.hqCountry && form.industry && form.tierRole;
-    if (step === 1) return form.fullName && form.workEmail && form.jobTitle;
+    if (step === 1)
+      return (
+        form.fullName &&
+        form.workEmail &&
+        form.jobTitle &&
+        form.password.length >= 8
+      );
     return true;
   }, [step, form]);
 
@@ -62,9 +74,41 @@ function RegisterPage() {
     (v: FormState[K]) =>
       setForm((f) => ({ ...f, [k]: v }));
 
+  async function submit() {
+    setErr(null);
+    setBusy(true);
+    const { error } = await supabase.auth.signUp({
+      email: form.workEmail,
+      password: form.password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+        data: {
+          full_name: form.fullName,
+          job_title: form.jobTitle,
+          legal_name: form.legalName,
+          hq_country: form.hqCountry,
+          industry: form.industry,
+          tier_role: form.tierRole,
+          note: form.note,
+        },
+      },
+    });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    setSubmitted(true);
+    // If email confirmation is disabled the session is already active — forward
+    // to the dashboard, which handles the pending-approval screen itself.
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      setTimeout(() => navigate({ to: "/dashboard", replace: true }), 1200);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Top bar */}
       <div className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-[1080px] items-center justify-between px-6">
           <Link to="/">
@@ -80,7 +124,6 @@ function RegisterPage() {
       </div>
 
       <div className="mx-auto grid max-w-[1080px] gap-12 px-6 py-16 md:grid-cols-[260px_1fr]">
-        {/* Stepper */}
         <aside>
           <div className="mono-label">§ Enrolment</div>
           <h1 className="mt-3 font-display text-[28px] font-medium leading-[1.15] tracking-tight">
@@ -122,7 +165,6 @@ function RegisterPage() {
           </ol>
         </aside>
 
-        {/* Card */}
         <section className="rounded-md border border-border bg-card">
           <header className="flex items-center justify-between border-b border-border px-6 py-3">
             <span className="mono-label">
@@ -205,6 +247,14 @@ function RegisterPage() {
                     onChange={set("workEmail")}
                     placeholder="ines@acme.co"
                   />
+                  <Field
+                    className="sm:col-span-2"
+                    label="Password (min. 8 characters)"
+                    type="password"
+                    value={form.password}
+                    onChange={set("password")}
+                    placeholder="••••••••"
+                  />
                   <div className="sm:col-span-2">
                     <div className="mono-label mb-1.5">
                       Brief note (optional)
@@ -223,8 +273,8 @@ function RegisterPage() {
               {step === 2 && (
                 <div>
                   <p className="text-[13px] text-muted-foreground">
-                    Review the details below. On submission your request enters
-                    the trust-desk queue.
+                    Review the details below. On submission your account is
+                    created and your organisation enters the trust-desk queue.
                   </p>
                   <dl className="mt-6 divide-y divide-border border-y border-border">
                     {[
@@ -245,17 +295,11 @@ function RegisterPage() {
                       </div>
                     ))}
                   </dl>
-                  <label className="mt-6 flex items-start gap-2 text-[12.5px] text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      required
-                      className="mt-0.5 h-3.5 w-3.5 accent-[oklch(0.58_0.13_232)]"
-                    />
-                    <span>
-                      I confirm the information above is accurate and I am
-                      authorised to represent this organisation.
-                    </span>
-                  </label>
+                  {err && (
+                    <div className="mt-4 rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                      {err}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -266,7 +310,7 @@ function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setStep((s) => Math.max(0, s - 1))}
-                disabled={step === 0}
+                disabled={step === 0 || busy}
                 className="text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
               >
                 ← Back
@@ -283,10 +327,11 @@ function RegisterPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setSubmitted(true)}
-                  className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+                  onClick={submit}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-60"
                 >
-                  Submit for review →
+                  {busy ? "Submitting…" : "Create account & submit →"}
                 </button>
               )}
             </footer>
@@ -302,18 +347,19 @@ function SubmittedPanel({ org, email }: { org: string; email: string }) {
     <div className="p-8 animate-rise">
       <div className="mono-label !text-primary">§ Received</div>
       <h2 className="mt-3 font-display text-[26px] font-medium tracking-tight">
-        Your request is in the queue.
+        Your account is created and your request is in the queue.
       </h2>
       <p className="mt-3 max-w-md text-[13.5px] text-muted-foreground">
         The trust desk will review {org || "your organisation"} within two
         business days. A decision will be sent to{" "}
         <span className="text-foreground">{email || "your work email"}</span>.
+        You'll be taken to a status page shortly.
       </p>
 
       <div className="mt-8 grid grid-cols-3 gap-3">
         {[
-          ["Reference", "GC-" + Math.random().toString(36).slice(2, 8).toUpperCase()],
-          ["Queue position", "07"],
+          ["Status", "Awaiting review"],
+          ["Queue", "Trust desk"],
           ["Est. response", "≤ 48h"],
         ].map(([k, v]) => (
           <div key={k} className="rounded-md border border-border p-3">
@@ -325,10 +371,10 @@ function SubmittedPanel({ org, email }: { org: string; email: string }) {
 
       <div className="mt-8 flex items-center gap-3">
         <Link
-          to="/"
-          className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-surface"
+          to="/dashboard"
+          className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
         >
-          ← Back to overview
+          Continue →
         </Link>
       </div>
     </div>
