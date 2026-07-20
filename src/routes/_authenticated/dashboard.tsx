@@ -58,6 +58,11 @@ const adminProfilesQuery = queryOptions({
   queryKey: ["admin", "profiles"],
   queryFn: () => listAllProfiles(),
 });
+const adminUsersQuery = queryOptions({
+  queryKey: ["admin", "users"],
+  queryFn: () => adminListUsers(),
+});
+
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
