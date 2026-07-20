@@ -1796,11 +1796,20 @@ function UserActivityModal({
                         </div>
                       </td>
                       <td className="px-6 py-3 text-[11.5px] text-muted-foreground">
-                        {meta.by && (
-                          <div className="mb-1 text-[10.5px] uppercase tracking-wide">
-                            By {meta.by === "self" ? "user" : "admin"}
-                          </div>
-                        )}
+                        {(() => {
+                          const by =
+                            meta.by ??
+                            (r.action?.startsWith("auth.")
+                              ? "self"
+                              : r.actor_id && r.target_id && r.actor_id !== r.target_id
+                                ? "admin"
+                                : "self");
+                          return (
+                            <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-foreground">
+                              By {by === "self" ? "user" : "admin"}
+                            </div>
+                          );
+                        })()}
                         {meta.changes && typeof meta.changes === "object" && (
                           <div className="mb-1 space-y-0.5">
                             {Object.entries(meta.changes as Record<string, { from: string; to: string }>).map(
@@ -1836,6 +1845,12 @@ function UserActivityModal({
                             {meta.user_agent}
                           </div>
                         )}
+                        {!meta.timezone &&
+                          !meta.user_agent &&
+                          !meta.changes &&
+                          !meta.from &&
+                          !meta.email &&
+                          !meta.reason && <div>—</div>}
                       </td>
                     </tr>
                   );
