@@ -77,11 +77,17 @@ function SuppliersPage() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["suppliers", "mine"] }),
       qc.invalidateQueries({ queryKey: ["suppliers", "graph"] }),
+      qc.invalidateQueries({ queryKey: ["watches", "mine"] }),
     ]);
   }
 
   async function onRemove(id: string) {
     await removeSupplier({ data: { id } });
+    await refresh();
+  }
+
+  async function onToggleWatch(supplierId: string, next: boolean) {
+    await toggleWatch({ data: { supplier_id: supplierId, watch: next } });
     await refresh();
   }
 
