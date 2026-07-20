@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateSignals } from "@/lib/risk-signals";
-import { getMySupplyGraph } from "@/lib/suppliers.functions";
+
 
 export type AlertRow = {
   id: string;
@@ -71,8 +71,17 @@ export const syncAlerts = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
 
-    const graph = await getMySupplyGraph();
-    const orgs = graph.map((n) => ({
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: graph, error: gErr } = await supabaseAdmin.rpc(
+      "get_supply_graph",
+      { _user_id: userId },
+    );
+    if (gErr) throw gErr;
+    const orgs = (graph ?? []).map((n: {
+      supplier_org_id: string;
+      supplier_name: string;
+      supplier_country: string | null;
+    }) => ({
       id: n.supplier_org_id,
       name: n.supplier_name,
       country: n.supplier_country ?? "",
