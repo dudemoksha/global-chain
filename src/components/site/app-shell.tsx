@@ -2,6 +2,9 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { Mark } from "@/components/site/mark";
 import { AlertBell } from "@/components/site/alert-bell";
 import { supabase } from "@/integrations/supabase/client";
+import { logAuthEvent } from "@/lib/activity.functions";
+import { collectDeviceMeta } from "@/lib/device-meta";
+
 
 type NavItem = { to: string; label: string };
 
@@ -34,9 +37,13 @@ export function AppShell({
   const router = useRouter();
 
   async function signOut() {
+    try {
+      await logAuthEvent({ data: { kind: "logout", ...collectDeviceMeta() } });
+    } catch {}
     await supabase.auth.signOut();
     router.navigate({ to: "/", replace: true });
   }
+
 
   const items = isAdmin ? ADMIN_NAV : USER_NAV;
 

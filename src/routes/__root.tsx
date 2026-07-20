@@ -140,6 +140,16 @@ function RootComponent() {
         if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
         router.invalidate();
         if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+        if (event === "SIGNED_IN") {
+          Promise.all([
+            import("@/lib/activity.functions"),
+            import("@/lib/device-meta"),
+          ])
+            .then(([{ logAuthEvent }, { collectDeviceMeta }]) =>
+              logAuthEvent({ data: { kind: "login", ...collectDeviceMeta() } }),
+            )
+            .catch(() => {});
+        }
       });
       // Store cleanup
       (window as unknown as { __gc_auth_sub?: { unsubscribe: () => void } }).__gc_auth_sub =
