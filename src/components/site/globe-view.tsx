@@ -79,8 +79,7 @@ export default function GlobeView({
         globeImageUrl={null as unknown as string}
         showGlobe
         globeMaterial={
-          // Minimalist white sphere; no textures, no glow.
-          new (globalThisThree()).MeshPhongMaterial({
+          new THREE.MeshPhongMaterial({
             color: "#f4f6fa",
             emissive: "#ffffff",
             emissiveIntensity: 0,
