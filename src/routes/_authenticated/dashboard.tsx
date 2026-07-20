@@ -808,13 +808,7 @@ function AdminOverview({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-md border border-border bg-card p-6">
-            <div className="mono-label">Quick actions</div>
-            <div className="mt-4 flex flex-col gap-2">
-              <ActionLink to="/analytics" label="Platform analytics" />
-            </div>
 
-          </div>
 
           <div className="rounded-md border border-border bg-card p-6">
             <div className="mono-label">Top countries</div>
@@ -1045,8 +1039,8 @@ function AdminUsers({ users }: { users: AdminUserRow[] }) {
           <div className="mono-label">User management</div>
           <div className="mt-1 text-[13px] text-muted-foreground">
             {users.length} accounts · {users.filter((u) => u.is_admin).length}{" "}
-            admin · {users.filter((u) => u.status === "suspended").length}{" "}
-            suspended
+            admin · {users.filter((u) => !u.is_admin).length} users ·{" "}
+            {users.filter((u) => u.status === "suspended").length} suspended
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1063,7 +1057,7 @@ function AdminUsers({ users }: { users: AdminUserRow[] }) {
           >
             <option value="all">All roles</option>
             <option value="admin">Admins</option>
-            <option value="operator">Operators</option>
+            <option value="operator">Users</option>
           </select>
           <button
             type="button"
@@ -1118,7 +1112,7 @@ function AdminUsers({ users }: { users: AdminUserRow[] }) {
                           : "bg-surface text-foreground"
                       }`}
                     >
-                      {u.is_admin ? "Admin" : "Operator"}
+                      {u.is_admin ? "Admin" : "User"}
                     </span>
                   </td>
                   <td className="px-6 py-3">
@@ -1437,7 +1431,7 @@ function UserFormModal({
             }
             className={inputCls}
           >
-            <option value="operator">Operator</option>
+            <option value="operator">User</option>
             <option value="admin">Admin</option>
           </select>
         </ModalField>
