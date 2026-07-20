@@ -197,7 +197,7 @@ function GlobeBody({ selfName }: { selfName: string }) {
       });
 
     return { nodes: nodeList, arcs, signals };
-  }, [suppliers, graph, selfName]);
+  }, [suppliers, graph, selfName, liveQ.data]);
 
   const focused = focus ? nodes.find((n) => n.id === focus) : null;
   const focusedSignals = focused
