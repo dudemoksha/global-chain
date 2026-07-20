@@ -8,11 +8,16 @@ type NavItem = { to: string; label: string; adminOnly?: boolean };
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/suppliers", label: "Suppliers" },
+  { to: "/factories", label: "Factories" },
+  { to: "/inventory", label: "Inventory" },
   { to: "/globe", label: "Globe" },
   { to: "/signals", label: "Signals" },
   { to: "/simulation", label: "Simulation" },
+  { to: "/analytics", label: "Analytics" },
+  { to: "/uploads", label: "Uploads" },
+  { to: "/assistant", label: "Assistant" },
   { to: "/alerts", label: "Alerts" },
-  { to: "/admin/requests", label: "Trust desk", adminOnly: true },
+  { to: "/admin/companies", label: "Admin", adminOnly: true },
 ];
 
 export function AppShell({
