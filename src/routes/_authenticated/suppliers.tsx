@@ -186,13 +186,14 @@ function SuppliersPage() {
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 {[
+                  "",
                   "Organisation",
                   "Category",
                   "Criticality",
                   "Spend / Lead time",
                   "",
-                ].map((h) => (
-                  <th key={h} className="mono-label px-4 py-2.5 text-left">
+                ].map((h, i) => (
+                  <th key={i} className="mono-label px-4 py-2.5 text-left">
                     {h}
                   </th>
                 ))}
@@ -202,7 +203,7 @@ function SuppliersPage() {
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-16 text-center text-muted-foreground"
                   >
                     No suppliers yet — add your first tier-1 partner to begin
@@ -215,6 +216,12 @@ function SuppliersPage() {
                   key={r.id}
                   className="border-b border-border last:border-0"
                 >
+                  <td className="px-4 py-4 align-top">
+                    <WatchStar
+                      on={watchedSet.has(r.id)}
+                      onClick={() => onToggleWatch(r.id, !watchedSet.has(r.id))}
+                    />
+                  </td>
                   <td className="px-4 py-4 align-top">
                     <div className="font-medium">
                       {r.organizations?.display_name ?? "—"}
