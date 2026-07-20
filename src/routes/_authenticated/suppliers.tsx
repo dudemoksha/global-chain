@@ -4,18 +4,15 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import { useState } from "react";
-import { Mark } from "@/components/site/mark";
-import { AlertBell } from "@/components/site/alert-bell";
+import { useMemo, useState } from "react";
+import { AppShell } from "@/components/site/app-shell";
 import { supabase } from "@/integrations/supabase/client";
 import {
   addSupplier,
-  getMySupplyGraph,
   listMySuppliers,
   removeSupplier,
 } from "@/lib/suppliers.functions";
 import { getMyProfile } from "@/lib/profile.functions";
-import { listMyWatches, toggleWatch } from "@/lib/alerts.functions";
 
 const meQuery = queryOptions({
   queryKey: ["me"],
@@ -24,14 +21,6 @@ const meQuery = queryOptions({
 const listQuery = queryOptions({
   queryKey: ["suppliers", "mine"],
   queryFn: () => listMySuppliers(),
-});
-const graphQuery = queryOptions({
-  queryKey: ["suppliers", "graph"],
-  queryFn: () => getMySupplyGraph(),
-});
-const watchesQuery = queryOptions({
-  queryKey: ["watches", "mine"],
-  queryFn: () => listMyWatches(),
 });
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
@@ -45,8 +34,6 @@ export const Route = createFileRoute("/_authenticated/suppliers")({
     await Promise.all([
       context.queryClient.ensureQueryData(meQuery),
       context.queryClient.ensureQueryData(listQuery),
-      context.queryClient.ensureQueryData(graphQuery),
-      context.queryClient.ensureQueryData(watchesQuery),
     ]);
   },
   component: SuppliersPage,
@@ -57,28 +44,14 @@ type Criticality = "low" | "medium" | "high" | "critical";
 function SuppliersPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: rows } = useSuspenseQuery(listQuery);
-  const { data: graph } = useSuspenseQuery(graphQuery);
-  const { data: watches } = useSuspenseQuery(watchesQuery);
-  const watchedSet = new Set(watches);
   const qc = useQueryClient();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-
-  const tier2 = graph.filter((n) => n.tier === 2);
-  const tier2Distinct = new Map<string, (typeof tier2)[number]>();
-  tier2.forEach((n) => tier2Distinct.set(n.supplier_org_id, n));
-
-  async function signOut() {
-    await supabase.auth.signOut();
-    router.navigate({ to: "/", replace: true });
-  }
+  const [search, setSearch] = useState("");
+  const [critFilter, setCritFilter] = useState<"all" | Criticality>("all");
 
   async function refresh() {
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: ["suppliers", "mine"] }),
-      qc.invalidateQueries({ queryKey: ["suppliers", "graph"] }),
-      qc.invalidateQueries({ queryKey: ["watches", "mine"] }),
-    ]);
+    await qc.invalidateQueries({ queryKey: ["suppliers", "mine"] });
   }
 
   async function onRemove(id: string) {
@@ -86,10 +59,27 @@ function SuppliersPage() {
     await refresh();
   }
 
-  async function onToggleWatch(supplierId: string, next: boolean) {
-    await toggleWatch({ data: { supplier_id: supplierId, watch: next } });
-    await refresh();
-  }
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (critFilter !== "all" && r.criticality !== critFilter) return false;
+      if (!q) return true;
+      return (
+        r.organizations?.display_name?.toLowerCase().includes(q) ||
+        r.organizations?.country?.toLowerCase().includes(q) ||
+        r.category?.toLowerCase().includes(q)
+      );
+    });
+  }, [rows, search, critFilter]);
+
+  const stats = useMemo(() => {
+    const critical = rows.filter((r) => r.criticality === "critical").length;
+    const countries = new Set(
+      rows.map((r) => r.organizations?.country).filter(Boolean),
+    ).size;
+    const categories = new Set(rows.map((r) => r.category).filter(Boolean)).size;
+    return { total: rows.length, critical, countries, categories };
+  }, [rows]);
 
   if (!me.profile?.is_approved && !me.isAdmin) {
     return (
@@ -109,83 +99,75 @@ function SuppliersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-[1240px] items-center justify-between px-6">
-          <Link to="/dashboard">
-            <Mark />
-          </Link>
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link to="/dashboard" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Dashboard</Link>
-            <Link to="/suppliers" className="text-[13px] font-medium text-primary">Suppliers</Link>
-            <Link to="/globe" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Globe</Link>
-            <Link to="/signals" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Signals</Link>
-            <Link to="/alerts" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Alerts</Link>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <AlertBell />
+    <AppShell isAdmin={me.isAdmin} email={me.profile?.work_email ?? ""}>
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-[1240px] px-6 pb-8 pt-10">
+          <div className="mono-label">§ Buying</div>
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
+            <div className="min-w-0">
+              <h1 className="font-display text-[32px] font-medium tracking-tight">
+                Suppliers you buy from
+              </h1>
+              <p className="mt-2 max-w-2xl text-[13.5px] text-muted-foreground">
+                Declare every organisation you consume products or services
+                from. This is the source of truth for your risk score and
+                for the recommendations we surface when something goes wrong.
+              </p>
+            </div>
             <button
               type="button"
-              onClick={signOut}
-              className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
+              onClick={() => setOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
             >
-              Sign out
+              + Add supplier
             </button>
           </div>
-        </div>
-      </header>
 
-
-      <div className="mx-auto max-w-[1240px] px-6 py-14">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="mono-label">§ Directory</div>
-            <h1 className="mt-3 font-display text-[32px] font-medium tracking-tight">
-              Your supplier network
-            </h1>
-            <p className="mt-2 max-w-2xl text-[13.5px] text-muted-foreground">
-              Declare the organisations you buy from. When another operator on
-              Global-Chain declares one of them, we resolve the hidden
-              downstream tier — without exposing who told us.
-            </p>
+          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard k="Suppliers" v={String(stats.total)} />
+            <StatCard
+              k="Critical deps"
+              v={String(stats.critical)}
+              emphasis={stats.critical > 0}
+            />
+            <StatCard k="Countries" v={String(stats.countries)} />
+            <StatCard k="Categories" v={String(stats.categories)} />
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
-          >
-            + Add supplier
-          </button>
+        </div>
+      </section>
+
+      <div className="mx-auto max-w-[1240px] px-6 py-10">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, country or category"
+            className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground/60 focus:border-foreground"
+          />
+          <div className="flex items-center gap-1 rounded-md border border-border p-1">
+            {(["all", "low", "medium", "high", "critical"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCritFilter(c)}
+                className={`rounded-sm px-2.5 py-1 text-[12px] font-medium capitalize transition-colors ${
+                  critFilter === c
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard k="Tier-1 suppliers" v={rows.length.toString()} />
-          <StatCard
-            k="Tier-2 exposure"
-            v={tier2Distinct.size.toString()}
-            hint={
-              tier2Distinct.size > 0
-                ? "Resolved via linked operators"
-                : "None yet — grows as more of your suppliers join"
-            }
-            emphasis={tier2Distinct.size > 0}
-          />
-          <StatCard
-            k="Critical dependencies"
-            v={rows
-              .filter((r) => r.criticality === "critical")
-              .length.toString()}
-          />
-        </div>
-
-        <div className="mt-10 overflow-hidden rounded-md border border-border">
+        <div className="overflow-hidden rounded-md border border-border bg-card">
           <table className="w-full text-left text-[13.5px]">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 {[
-                  "",
-                  "Organisation",
+                  "Supplier",
                   "Category",
                   "Criticality",
                   "Spend / Lead time",
@@ -198,28 +180,23 @@ function SuppliersPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={5}
                     className="px-4 py-16 text-center text-muted-foreground"
                   >
-                    No suppliers yet — add your first tier-1 partner to begin
-                    building your graph.
+                    {rows.length === 0
+                      ? "No suppliers yet — add your first partner, or import them from the Upload centre."
+                      : "No suppliers match your filters."}
                   </td>
                 </tr>
               )}
-              {rows.map((r) => (
+              {filtered.map((r) => (
                 <tr
                   key={r.id}
                   className="border-b border-border last:border-0"
                 >
-                  <td className="px-4 py-4 align-top">
-                    <WatchStar
-                      on={watchedSet.has(r.id)}
-                      onClick={() => onToggleWatch(r.id, !watchedSet.has(r.id))}
-                    />
-                  </td>
                   <td className="px-4 py-4 align-top">
                     <div className="font-medium">
                       {r.organizations?.display_name ?? "—"}
@@ -256,44 +233,6 @@ function SuppliersPage() {
             </tbody>
           </table>
         </div>
-
-        {tier2Distinct.size > 0 && (
-          <div className="mt-12">
-            <div className="mono-label">§ Hidden linkage · Tier 2</div>
-            <h2 className="mt-2 font-display text-[22px] font-medium tracking-tight">
-              Downstream nodes we resolved for you
-            </h2>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              These are organisations your suppliers depend on. You do not see
-              which of your suppliers declared them.
-            </p>
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {[...tier2Distinct.values()].map((n) => (
-                <div
-                  key={n.supplier_org_id}
-                  className="rounded-md border border-border bg-card p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{n.supplier_name}</div>
-                      <div className="mono-label mt-1">
-                        {[n.supplier_country, n.supplier_industry]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </div>
-                    </div>
-                    <CriticalityPill c={n.criticality as Criticality} />
-                  </div>
-                  {n.category && (
-                    <div className="mt-3 text-[12px] text-muted-foreground">
-                      As: {n.category}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {open && (
@@ -305,34 +244,27 @@ function SuppliersPage() {
           }}
         />
       )}
-    </div>
+    </AppShell>
   );
 }
 
 function StatCard({
   k,
   v,
-  hint,
   emphasis,
 }: {
   k: string;
   v: string;
-  hint?: string;
   emphasis?: boolean;
 }) {
   return (
     <div
       className={`rounded-md border p-5 ${
-        emphasis
-          ? "border-primary/40 bg-accent"
-          : "border-border bg-card"
+        emphasis ? "border-primary/40 bg-accent" : "border-border bg-card"
       }`}
     >
       <div className="mono-label">{k}</div>
       <div className="mt-2 font-display text-[28px] font-medium">{v}</div>
-      {hint && (
-        <div className="mt-2 text-[12px] text-muted-foreground">{hint}</div>
-      )}
     </div>
   );
 }
@@ -356,27 +288,6 @@ function CriticalityPill({ c }: { c: Criticality }) {
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>
-  );
-}
-
-function WatchStar({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      aria-label={on ? "Unwatch" : "Watch"}
-      title={on ? "Watching — click to unwatch" : "Watch to prioritise alerts"}
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors ${
-        on
-          ? "border-primary/40 text-primary"
-          : "border-border text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      <svg width="13" height="13" viewBox="0 0 16 16" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
-        <path d="M8 1.8 10 6l4.4.4-3.4 3 1 4.4L8 11.6 3.9 13.8l1-4.4-3.4-3L6 6Z" />
-      </svg>
-    </button>
   );
 }
 
@@ -435,7 +346,7 @@ function AddSupplierDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/20 p-6 backdrop-blur-[1px]">
       <div className="w-full max-w-2xl rounded-md border border-border bg-background shadow-xl animate-rise">
         <header className="flex items-center justify-between border-b border-border px-6 py-3">
-          <span className="mono-label">§ New tier-1 supplier</span>
+          <span className="mono-label">§ New supplier</span>
           <button
             type="button"
             onClick={onClose}
