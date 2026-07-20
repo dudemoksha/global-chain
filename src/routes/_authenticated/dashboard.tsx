@@ -121,7 +121,7 @@ function Dashboard() {
 
 /* ═══════════════════════════ USER DASHBOARD ═══════════════════════════ */
 
-type UserTab = "overview" | "risk" | "inventory" | "network";
+type UserTab = "overview" | "risk" | "selling" | "buying";
 
 function UserDashboard({
   profile,
@@ -134,7 +134,6 @@ function UserDashboard({
   const { data: suppliers } = useSuspenseQuery(suppliersQuery);
   const { data: graph } = useSuspenseQuery(graphQuery);
   const { data: inventory } = useSuspenseQuery(inventoryQuery);
-  const { data: factories } = useSuspenseQuery(factoriesQuery);
 
   // Auto-sync live risk on mount (once)
   const syncedRef = useRef(false);
@@ -148,6 +147,23 @@ function UserDashboard({
     syncMut.mutate();
   }, [syncMut]);
 
+  /* Backend-only tier map. User perspective:
+     tier 1 = direct suppliers, tier 2+ = hidden upstream.
+     Deeper tiers decay their contribution to the risk score. */
+  const orgTier = useMemo(() => {
+    const m = new Map<string, number>();
+    suppliers.forEach((s) => {
+      if (s.organizations) m.set(s.organizations.id, 1);
+    });
+    graph.forEach((g) => {
+      const cur = m.get(g.supplier_org_id);
+      if (cur === undefined || g.tier < cur) m.set(g.supplier_org_id, g.tier);
+    });
+    return m;
+  }, [suppliers, graph]);
+
+  /* Live signals — war conflicts (GDELT), seismic (USGS), weather feeds
+     already normalised by generateSignals against every org in the graph. */
   const signals = useMemo(() => {
     const orgs: Array<{ id: string; name: string; country: string }> = [];
     suppliers.forEach((s) => {
@@ -159,7 +175,7 @@ function UserDashboard({
         });
     });
     graph
-      .filter((g) => g.tier === 2)
+      .filter((g) => g.tier >= 2)
       .forEach((g) =>
         orgs.push({
           id: g.supplier_org_id,
@@ -170,80 +186,115 @@ function UserDashboard({
     return generateSignals(orgs);
   }, [suppliers, graph]);
 
+  /* Composite risk score — tier-weighted decay so upstream noise never
+     dominates. Longer tier → lower contribution. Never surfaced as tiers. */
   const risk = useMemo(() => {
-    const sevWeight = { low: 5, medium: 12, high: 22, critical: 35 } as const;
-    const tierWeight = (t: number) => (t <= 1 ? 1 : t === 2 ? 0.5 : 0.25);
-
-    const orgTier = new Map<string, number>();
-    suppliers.forEach((s) => {
-      if (s.organizations) orgTier.set(s.organizations.id, 1);
-    });
-    graph.forEach((g) => {
-      const cur = orgTier.get(g.supplier_org_id);
-      if (cur === undefined || g.tier < cur)
-        orgTier.set(g.supplier_org_id, g.tier);
-    });
+    const sevWeight = { low: 4, medium: 10, high: 20, critical: 32 } as const;
+    const tierDecay = (t: number) => Math.pow(0.5, Math.max(0, t - 1));
 
     let raw = 0;
     signals.forEach((s) => {
       s.affectsOrgIds.forEach((id) => {
         const t = orgTier.get(id);
         if (t === undefined) return;
-        raw += sevWeight[s.severity] * tierWeight(t);
+        raw += sevWeight[s.severity] * tierDecay(t);
       });
     });
 
     const critical = suppliers.filter((s) => s.criticality === "critical").length;
-    raw += critical * 4;
+    raw += critical * 3;
 
     const score = Math.max(0, Math.min(100, Math.round(100 - raw)));
     const band =
-      score >= 80
-        ? "Stable"
-        : score >= 60
-          ? "Watch"
-          : score >= 40
-            ? "Elevated"
-            : "Critical";
+      score >= 80 ? "Stable"
+      : score >= 60 ? "Watch"
+      : score >= 40 ? "Elevated"
+      : "Critical";
     return { score, band };
-  }, [signals, suppliers, graph]);
+  }, [signals, suppliers, orgTier]);
 
-  const skuStats = useMemo(() => {
+  /* Selling (my SKUs) — inventory represents products the user supplies. */
+  const selling = useMemo(() => {
     const total = inventory.length;
     const low = inventory.filter(
       (i) => i.current_stock <= (i.reorder_level ?? 0),
     ).length;
     const units = inventory.reduce((n, i) => n + (i.current_stock ?? 0), 0);
-    return { total, low, units };
+    const safety = inventory.reduce((n, i) => n + (i.safety_stock ?? 0), 0);
+    return { total, low, units, safety, healthy: total - low };
   }, [inventory]);
 
-  const rec = useMemo(() => {
-    const rank = { critical: 3, high: 2, medium: 1, low: 0 } as const;
-    const top = [...signals].sort(
-      (a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0),
-    )[0];
-    if (!top) return null;
-    const hit = suppliers.find((s) => s.organizations?.country === top.country);
-    return {
-      country: top.country,
-      industry: hit?.organizations?.industry ?? "",
-      category: hit?.category ?? "",
-      headline: top.headline,
+  /* Buying (my suppliers) — spend concentration and critical dependencies. */
+  const buying = useMemo(() => {
+    const spendRank: Record<string, number> = {
+      "<$100k": 1, "$100k-1M": 2, "$1M-10M": 3, ">$10M": 4,
     };
-  }, [signals, suppliers]);
+    const byCategory = new Map<string, number>();
+    const byCountry = new Map<string, number>();
+    let spendScore = 0;
+    suppliers.forEach((s) => {
+      byCategory.set(s.category || "uncategorised",
+        (byCategory.get(s.category || "uncategorised") ?? 0) + 1);
+      const c = s.organizations?.country || "Unknown";
+      byCountry.set(c, (byCountry.get(c) ?? 0) + 1);
+      spendScore += spendRank[s.annual_spend_bucket] ?? 0;
+    });
+    return {
+      total: suppliers.length,
+      critical: suppliers.filter((s) => s.criticality === "critical").length,
+      countries: byCountry.size,
+      byCategory: [...byCategory.entries()].sort((a, b) => b[1] - a[1]),
+      byCountry: [...byCountry.entries()].sort((a, b) => b[1] - a[1]),
+      spendScore,
+    };
+  }, [suppliers]);
 
-  const tier2 = graph.filter((g) => g.tier === 2).length;
+  /* Product-aware recommendations — pair the highest-severity live signal
+     with the category most exposed to that country, so alternatives are
+     matched by product family, not just geography. */
+  const recs = useMemo(() => {
+    const rank = { critical: 3, high: 2, medium: 1, low: 0 } as const;
+    const sorted = [...signals].sort(
+      (a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0),
+    );
+    const out: Array<{
+      id: string;
+      country: string;
+      industry: string;
+      category: string;
+      headline: string;
+      severity: string;
+    }> = [];
+    const seen = new Set<string>();
+    for (const s of sorted) {
+      const hit = suppliers.find(
+        (x) => x.organizations?.country === s.country,
+      );
+      const key = `${s.country}|${hit?.category ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        id: s.id,
+        country: s.country,
+        industry: hit?.organizations?.industry ?? "",
+        category: hit?.category ?? "",
+        headline: s.headline,
+        severity: s.severity,
+      });
+      if (out.length >= 3) break;
+    }
+    return out;
+  }, [signals, suppliers]);
 
   const USER_TABS: { id: UserTab; label: string }[] = [
     { id: "overview", label: "Overview" },
-    { id: "risk", label: "Risk & signals" },
-    { id: "inventory", label: "Inventory" },
-    { id: "network", label: "Network" },
+    { id: "risk", label: "Risk & recommendations" },
+    { id: "selling", label: "Selling (my SKUs)" },
+    { id: "buying", label: "Buying (my suppliers)" },
   ];
 
   return (
     <>
-      {/* Hero band */}
       <section className="border-b border-border">
         <div className="mx-auto max-w-[1240px] px-6 pb-8 pt-10">
           <div className="mono-label">§ Operations</div>
@@ -257,27 +308,20 @@ function UserDashboard({
                 <span className="text-foreground">
                   {profile.full_name || profile.work_email}
                 </span>
-                . Deeper tiers are analysed privately and never revealed.
+                . You act as both supplier and consumer — upstream exposure
+                is analysed privately and never revealed by name.
               </p>
             </div>
             <div className="flex items-center gap-6">
-              <MiniStat label="Tier-1" value={String(suppliers.length)} />
-              <MiniStat label="Tier-2" value={String(tier2)} />
-              <MiniStat label="SKUs" value={String(skuStats.total)} />
-              <MiniStat
-                label="Low stock"
-                value={String(skuStats.low)}
-                emphasis={skuStats.low > 0}
-              />
+              <MiniStat label="Risk" value={String(risk.score)} emphasis={risk.score < 60} />
+              <MiniStat label="Suppliers" value={String(suppliers.length)} />
+              <MiniStat label="My SKUs" value={String(selling.total)} />
+              <MiniStat label="Low stock" value={String(selling.low)} emphasis={selling.low > 0} />
             </div>
           </div>
         </div>
         <div className="mx-auto max-w-[1240px] px-6">
-          <TabBar
-            tabs={USER_TABS}
-            active={tab}
-            onChange={(v) => setTab(v as UserTab)}
-          />
+          <TabBar tabs={USER_TABS} active={tab} onChange={(v) => setTab(v as UserTab)} />
         </div>
       </section>
 
@@ -285,50 +329,37 @@ function UserDashboard({
         {tab === "overview" && (
           <UserOverview
             risk={risk}
-            suppliers={suppliers}
-            skuStats={skuStats}
-            factories={factories}
+            selling={selling}
+            buying={buying}
             signals={signals}
-            rec={rec}
+            recs={recs}
           />
         )}
         {tab === "risk" && (
-          <UserRisk risk={risk} signals={signals} rec={rec} />
+          <UserRisk risk={risk} signals={signals} recs={recs} />
         )}
-        {tab === "inventory" && (
-          <UserInventory inventory={inventory} skuStats={skuStats} />
+        {tab === "selling" && (
+          <UserSelling inventory={inventory} selling={selling} />
         )}
-        {tab === "network" && (
-          <UserNetwork suppliers={suppliers} graph={graph} />
+        {tab === "buying" && (
+          <UserBuying suppliers={suppliers} buying={buying} />
         )}
       </div>
     </>
   );
 }
 
-/* ── User tab: Overview ── */
+/* ── Overview ── */
 
 function UserOverview({
-  risk,
-  suppliers,
-  skuStats,
-  factories,
-  signals,
-  rec,
+  risk, selling, buying, signals, recs,
 }: {
   risk: { score: number; band: string };
-  suppliers: any[];
-  skuStats: { total: number; low: number; units: number };
-  factories: any[];
+  selling: { total: number; low: number; units: number; healthy: number; safety: number };
+  buying: { total: number; critical: number; countries: number };
   signals: ReturnType<typeof generateSignals>;
-  rec: {
-    country: string;
-    industry: string;
-    category: string;
-    headline: string;
-  } | null;
+  recs: Array<{ id: string; country: string; industry: string; category: string; headline: string; severity: string }>;
 }) {
-  const critical = suppliers.filter((s) => s.criticality === "critical").length;
   const highSev = signals.filter(
     (s) => s.severity === "high" || s.severity === "critical",
   ).length;
@@ -339,102 +370,34 @@ function UserOverview({
 
       <div className="grid gap-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard k="Suppliers" v={String(suppliers.length)} />
-          <StatCard k="Critical deps" v={String(critical)} />
-          <StatCard k="Factories" v={String(factories.length)} />
-          <StatCard
-            k="High-sev alerts"
-            v={String(highSev)}
-            emphasis={highSev > 0}
-          />
+          <StatCard k="Suppliers" v={String(buying.total)} />
+          <StatCard k="Critical deps" v={String(buying.critical)} />
+          <StatCard k="My SKUs" v={String(selling.total)} />
+          <StatCard k="High-sev alerts" v={String(highSev)} emphasis={highSev > 0} />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <ActionCard
-            title="Upload centre"
-            body="Bring in suppliers, factories and SKUs from Excel."
-            to="/uploads"
-          />
-          <ActionCard
-            title="Network globe"
-            body="See your live 3D exposure map."
-            to="/globe"
-          />
-          <ActionCard
-            title="Simulation"
-            body="Model what-if disruptions before they happen."
-            to="/simulation"
-          />
-          <ActionCard
-            title="AI assistant"
-            body="Ask questions about your posture."
-            to="/assistant"
-          />
-        </div>
-
-        {rec && (
-          <RecommendationsPanel
-            title="Recommended alternatives"
-            subtitle={`Response to: ${rec.headline}`}
-            industry={rec.industry}
-            category={rec.category}
-            avoidCountry={rec.country}
-            limit={4}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── User tab: Risk ── */
-
-function UserRisk({
-  risk,
-  signals,
-  rec,
-}: {
-  risk: { score: number; band: string };
-  signals: ReturnType<typeof generateSignals>;
-  rec: {
-    country: string;
-    industry: string;
-    category: string;
-    headline: string;
-  } | null;
-}) {
-  return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      <RiskCard score={risk.score} band={risk.band} />
-
-      <div className="rounded-md border border-border bg-card p-6">
-        <div className="flex items-center justify-between">
-          <div className="mono-label">Active disruptions</div>
-          <Link
-            to="/signals"
-            className="text-[12px] font-medium text-primary hover:underline"
-          >
-            Full feed →
-          </Link>
-        </div>
-        {signals.length === 0 ? (
-          <div className="mt-6 rounded-md border border-dashed border-border p-10 text-center text-[13px] text-muted-foreground">
-            No active disruptions on your network.
+        <div className="rounded-md border border-border bg-card p-6">
+          <div className="flex items-center justify-between">
+            <div className="mono-label">Live disruption feed</div>
+            <Link to="/signals" className="text-[12px] font-medium text-primary hover:underline">
+              Full feed →
+            </Link>
           </div>
-        ) : (
-          <ul className="mt-4 divide-y divide-border">
-            {signals.slice(0, 10).map((s) => (
-              <li key={s.id} className="py-3">
-                <div className="flex items-start gap-3">
+          {signals.length === 0 ? (
+            <p className="mt-6 text-[13px] text-muted-foreground">
+              No active disruptions across your network.
+            </p>
+          ) : (
+            <ul className="mt-4 divide-y divide-border">
+              {signals.slice(0, 5).map((s) => (
+                <li key={s.id} className="flex items-start gap-3 py-3">
                   <span
                     className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ background: severityColor(s.severity) }}
                   />
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                      <span className="text-[13.5px] font-medium">
-                        {s.headline}
-                      </span>
+                      <span className="truncate text-[13.5px] font-medium">{s.headline}</span>
                       <span className="mono-label">
                         {severityLabel(s.severity)} · {s.kind}
                       </span>
@@ -443,6 +406,101 @@ function UserRisk({
                       {s.country} · {s.hoursAgo}h ago
                     </div>
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {recs[0] && (
+          <RecommendationsPanel
+            title="Suggested alternatives"
+            subtitle={`Response to: ${recs[0].headline}`}
+            industry={recs[0].industry}
+            category={recs[0].category}
+            avoidCountry={recs[0].country}
+            limit={4}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Risk & recommendations ── */
+
+function UserRisk({
+  risk, signals, recs,
+}: {
+  risk: { score: number; band: string };
+  signals: ReturnType<typeof generateSignals>;
+  recs: Array<{ id: string; country: string; industry: string; category: string; headline: string; severity: string }>;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+        <RiskCard score={risk.score} band={risk.band} />
+
+        <div className="rounded-md border border-border bg-card p-6">
+          <div className="mono-label">How this is calculated</div>
+          <p className="mt-3 text-[13.5px] leading-relaxed text-muted-foreground">
+            Your composite score blends four live inputs against every
+            supplier in your declared network:
+          </p>
+          <ul className="mt-4 space-y-2 text-[13px]">
+            <li className="flex items-baseline gap-3">
+              <span className="mono-label w-24">Conflict</span>
+              <span>Armed-conflict and geopolitical events (GDELT).</span>
+            </li>
+            <li className="flex items-baseline gap-3">
+              <span className="mono-label w-24">Weather</span>
+              <span>Severe weather and climate events at supplier locations.</span>
+            </li>
+            <li className="flex items-baseline gap-3">
+              <span className="mono-label w-24">Geopolitics</span>
+              <span>Sanctions, trade posture and border activity.</span>
+            </li>
+            <li className="flex items-baseline gap-3">
+              <span className="mono-label w-24">Chain</span>
+              <span>Upstream disruption from suppliers-of-suppliers, decayed by distance.</span>
+            </li>
+          </ul>
+          <p className="mt-4 text-[12px] text-muted-foreground">
+            Upstream exposure is analysed privately. You only see your own
+            declared suppliers.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="mono-label">Active disruptions</div>
+          <Link to="/signals" className="text-[12px] font-medium text-primary hover:underline">
+            Full feed →
+          </Link>
+        </div>
+        {signals.length === 0 ? (
+          <div className="p-10 text-center text-[13px] text-muted-foreground">
+            No active disruptions on your network.
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {signals.slice(0, 12).map((s) => (
+              <li key={s.id} className="flex items-start gap-3 px-6 py-3">
+                <span
+                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: severityColor(s.severity) }}
+                />
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="text-[13.5px] font-medium">{s.headline}</span>
+                    <span className="mono-label">
+                      {severityLabel(s.severity)} · {s.kind}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-[12px] text-muted-foreground">
+                    {s.country} · {s.hoursAgo}h ago
+                  </div>
                 </div>
               </li>
             ))}
@@ -450,178 +508,113 @@ function UserRisk({
         )}
       </div>
 
-      {rec && (
-        <div className="lg:col-span-2">
-          <RecommendationsPanel
-            title="Recommended alternatives"
-            subtitle={`Response to: ${rec.headline}`}
-            industry={rec.industry}
-            category={rec.category}
-            avoidCountry={rec.country}
-            limit={6}
-          />
+      {recs.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border p-10 text-center text-[13px] text-muted-foreground">
+          No product-level recommendations right now — your chain is quiet.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {recs.map((r) => (
+            <RecommendationsPanel
+              key={r.id}
+              title={`Alternatives for ${r.category || "affected products"}`}
+              subtitle={`${severityLabel(r.severity as any)} · ${r.headline}`}
+              industry={r.industry}
+              category={r.category}
+              avoidCountry={r.country}
+              limit={5}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/* ── User tab: Inventory ── */
+/* ── Selling (my SKUs) ── */
 
-function UserInventory({
-  inventory,
-  skuStats,
+function UserSelling({
+  inventory, selling,
 }: {
   inventory: any[];
-  skuStats: { total: number; low: number; units: number };
+  selling: { total: number; low: number; units: number; healthy: number; safety: number };
 }) {
   const low = inventory.filter(
     (i) => i.current_stock <= (i.reorder_level ?? 0),
   );
+  const topSku = [...inventory]
+    .sort((a, b) => (b.current_stock ?? 0) - (a.current_stock ?? 0))
+    .slice(0, 6);
+  const byWarehouse = useMemo(() => {
+    const m = new Map<string, number>();
+    inventory.forEach((i) => {
+      const w = i.warehouse || "Unassigned";
+      m.set(w, (m.get(w) ?? 0) + (i.current_stock ?? 0));
+    });
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [inventory]);
+  const max = Math.max(1, ...byWarehouse.map(([, n]) => n));
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard k="SKUs" v={String(skuStats.total)} />
-        <StatCard k="Units on hand" v={skuStats.units.toLocaleString()} />
-        <StatCard
-          k="Low stock"
-          v={String(skuStats.low)}
-          emphasis={skuStats.low > 0}
-        />
-        <StatCard
-          k="Healthy"
-          v={String(skuStats.total - skuStats.low)}
-        />
-      </div>
-
-      <div className="rounded-md border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div className="mono-label">Low-stock SKUs</div>
-          <Link
-            to="/inventory"
-            className="text-[12px] font-medium text-primary hover:underline"
-          >
-            Manage inventory →
-          </Link>
-        </div>
-        {low.length === 0 ? (
-          <div className="p-10 text-center text-[13px] text-muted-foreground">
-            All SKUs are above their reorder level.
-          </div>
-        ) : (
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="px-6 py-3 font-medium">SKU</th>
-                <th className="px-6 py-3 font-medium">Name</th>
-                <th className="px-6 py-3 text-right font-medium">On hand</th>
-                <th className="px-6 py-3 text-right font-medium">Reorder</th>
-              </tr>
-            </thead>
-            <tbody>
-              {low.slice(0, 12).map((i) => (
-                <tr key={i.id} className="border-b border-border">
-                  <td className="px-6 py-3 font-mono text-[12px]">{i.sku}</td>
-                  <td className="px-6 py-3">{i.name}</td>
-                  <td className="px-6 py-3 text-right font-medium text-destructive">
-                    {i.current_stock}
-                  </td>
-                  <td className="px-6 py-3 text-right text-muted-foreground">
-                    {i.reorder_level ?? 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── User tab: Network ── */
-
-function UserNetwork({
-  suppliers,
-  graph,
-}: {
-  suppliers: any[];
-  graph: any[];
-}) {
-  const tier2 = graph.filter((g) => g.tier === 2);
-  const byCountry = useMemo(() => {
-    const m = new Map<string, number>();
-    suppliers.forEach((s) => {
-      const c = s.organizations?.country || "Unknown";
-      m.set(c, (m.get(c) ?? 0) + 1);
-    });
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-  }, [suppliers]);
-  const max = Math.max(1, ...byCountry.map(([, n]) => n));
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard k="Tier-1 declared" v={String(suppliers.length)} />
-        <StatCard k="Tier-2 hidden" v={String(tier2.length)} />
-        <StatCard
-          k="Countries covered"
-          v={String(new Set(suppliers.map((s) => s.organizations?.country)).size)}
-        />
+        <StatCard k="SKUs listed" v={String(selling.total)} />
+        <StatCard k="Units on hand" v={selling.units.toLocaleString()} />
+        <StatCard k="Healthy" v={String(selling.healthy)} />
+        <StatCard k="Low stock" v={String(selling.low)} emphasis={selling.low > 0} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="rounded-md border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <div className="mono-label">Your declared suppliers</div>
-            <Link
-              to="/suppliers"
-              className="text-[12px] font-medium text-primary hover:underline"
-            >
-              Manage →
+            <div className="mono-label">Low-stock SKUs</div>
+            <Link to="/inventory" className="text-[12px] font-medium text-primary hover:underline">
+              Manage inventory →
             </Link>
           </div>
-          {suppliers.length === 0 ? (
+          {low.length === 0 ? (
             <div className="p-10 text-center text-[13px] text-muted-foreground">
-              No suppliers yet. Head to Uploads to import your Excel sheet.
+              All SKUs are above their reorder level.
             </div>
           ) : (
-            <ul className="divide-y divide-border">
-              {suppliers.slice(0, 10).map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between px-6 py-3 text-[13px]"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">
-                      {s.organizations?.display_name || "—"}
-                    </div>
-                    <div className="truncate text-[12px] text-muted-foreground">
-                      {s.organizations?.country || "—"} ·{" "}
-                      {s.category || "uncategorised"}
-                    </div>
-                  </div>
-                  <span className="mono-label shrink-0">
-                    {s.criticality || "standard"}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="px-6 py-3 font-medium">SKU</th>
+                  <th className="px-6 py-3 font-medium">Name</th>
+                  <th className="px-6 py-3 text-right font-medium">On hand</th>
+                  <th className="px-6 py-3 text-right font-medium">Reorder</th>
+                </tr>
+              </thead>
+              <tbody>
+                {low.slice(0, 12).map((i) => (
+                  <tr key={i.id} className="border-b border-border">
+                    <td className="px-6 py-3 font-mono text-[12px]">{i.sku}</td>
+                    <td className="px-6 py-3">{i.name}</td>
+                    <td className="px-6 py-3 text-right font-medium text-destructive">
+                      {i.current_stock}
+                    </td>
+                    <td className="px-6 py-3 text-right text-muted-foreground">
+                      {i.reorder_level ?? 0}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
 
         <div className="rounded-md border border-border bg-card p-6">
-          <div className="mono-label">Concentration by country</div>
-          {byCountry.length === 0 ? (
+          <div className="mono-label">Units by warehouse</div>
+          {byWarehouse.length === 0 ? (
             <p className="mt-3 text-[13px] text-muted-foreground">No data.</p>
           ) : (
             <ul className="mt-4 space-y-2">
-              {byCountry.map(([c, n]) => (
-                <li key={c} className="text-[12px]">
+              {byWarehouse.map(([w, n]) => (
+                <li key={w} className="text-[12px]">
                   <div className="flex items-center justify-between">
-                    <span className="truncate">{c}</span>
-                    <span className="mono-label">{n}</span>
+                    <span className="truncate">{w}</span>
+                    <span className="mono-label">{n.toLocaleString()}</span>
                   </div>
                   <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface">
                     <div
@@ -634,6 +627,164 @@ function UserNetwork({
             </ul>
           )}
         </div>
+      </div>
+
+      <div className="rounded-md border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="mono-label">Top-stocked SKUs</div>
+        </div>
+        {topSku.length === 0 ? (
+          <div className="p-10 text-center text-[13px] text-muted-foreground">
+            No SKUs yet. Upload your catalogue from the Upload centre.
+          </div>
+        ) : (
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="px-6 py-3 font-medium">SKU</th>
+                <th className="px-6 py-3 font-medium">Name</th>
+                <th className="px-6 py-3 font-medium">Warehouse</th>
+                <th className="px-6 py-3 text-right font-medium">On hand</th>
+                <th className="px-6 py-3 text-right font-medium">Safety</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topSku.map((i) => (
+                <tr key={i.id} className="border-b border-border">
+                  <td className="px-6 py-3 font-mono text-[12px]">{i.sku}</td>
+                  <td className="px-6 py-3">{i.name}</td>
+                  <td className="px-6 py-3 text-muted-foreground">{i.warehouse || "—"}</td>
+                  <td className="px-6 py-3 text-right font-medium">{i.current_stock}</td>
+                  <td className="px-6 py-3 text-right text-muted-foreground">{i.safety_stock ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Buying (my suppliers) ── */
+
+function UserBuying({
+  suppliers, buying,
+}: {
+  suppliers: any[];
+  buying: {
+    total: number; critical: number; countries: number; spendScore: number;
+    byCategory: Array<[string, number]>;
+    byCountry: Array<[string, number]>;
+  };
+}) {
+  const maxCat = Math.max(1, ...buying.byCategory.map(([, n]) => n));
+  const maxCty = Math.max(1, ...buying.byCountry.map(([, n]) => n));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard k="Suppliers" v={String(buying.total)} />
+        <StatCard k="Critical deps" v={String(buying.critical)} emphasis={buying.critical > 0} />
+        <StatCard k="Countries" v={String(buying.countries)} />
+        <StatCard k="Spend index" v={String(buying.spendScore)} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-md border border-border bg-card p-6">
+          <div className="mono-label">Spend by category</div>
+          {buying.byCategory.length === 0 ? (
+            <p className="mt-3 text-[13px] text-muted-foreground">No data.</p>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {buying.byCategory.slice(0, 8).map(([c, n]) => (
+                <li key={c} className="text-[12px]">
+                  <div className="flex items-center justify-between">
+                    <span className="truncate">{c}</span>
+                    <span className="mono-label">{n}</span>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${(n / maxCat) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-md border border-border bg-card p-6">
+          <div className="mono-label">Concentration by country</div>
+          {buying.byCountry.length === 0 ? (
+            <p className="mt-3 text-[13px] text-muted-foreground">No data.</p>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {buying.byCountry.slice(0, 8).map(([c, n]) => (
+                <li key={c} className="text-[12px]">
+                  <div className="flex items-center justify-between">
+                    <span className="truncate">{c}</span>
+                    <span className="mono-label">{n}</span>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${(n / maxCty) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div className="mono-label">Your suppliers</div>
+          <Link to="/suppliers" className="text-[12px] font-medium text-primary hover:underline">
+            Manage →
+          </Link>
+        </div>
+        {suppliers.length === 0 ? (
+          <div className="p-10 text-center text-[13px] text-muted-foreground">
+            No suppliers yet. Head to the Upload centre to import your Excel sheet.
+          </div>
+        ) : (
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="px-6 py-3 font-medium">Supplier</th>
+                <th className="px-6 py-3 font-medium">Country</th>
+                <th className="px-6 py-3 font-medium">Category</th>
+                <th className="px-6 py-3 font-medium">Spend</th>
+                <th className="px-6 py-3 text-right font-medium">Criticality</th>
+              </tr>
+            </thead>
+            <tbody>
+              {suppliers.slice(0, 15).map((s) => (
+                <tr key={s.id} className="border-b border-border">
+                  <td className="px-6 py-3 font-medium">
+                    {s.organizations?.display_name || "—"}
+                  </td>
+                  <td className="px-6 py-3 text-muted-foreground">
+                    {s.organizations?.country || "—"}
+                  </td>
+                  <td className="px-6 py-3 text-muted-foreground">
+                    {s.category || "uncategorised"}
+                  </td>
+                  <td className="px-6 py-3 text-muted-foreground">
+                    {s.annual_spend_bucket || "—"}
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    <span className="mono-label">{s.criticality || "standard"}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
