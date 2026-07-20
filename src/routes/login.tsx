@@ -198,18 +198,36 @@ function Field({
   required?: boolean;
   autoComplete?: string;
 }) {
+  const [reveal, setReveal] = useState(false);
+  const isPassword = type === "password";
+  const inputType = isPassword && reveal ? "text" : type;
   return (
     <label className="block">
       <div className="mono-label mb-1.5">{label}</div>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        required={required}
-        autoComplete={autoComplete}
-        className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
-      />
+      <div className="relative">
+        <input
+          type={inputType}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          required={required}
+          autoComplete={autoComplete}
+          className={`w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground ${
+            isPassword ? "pr-14" : ""
+          }`}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setReveal((v) => !v)}
+            className="absolute inset-y-0 right-2 my-auto h-7 rounded px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            tabIndex={-1}
+            aria-label={reveal ? "Hide password" : "Show password"}
+          >
+            {reveal ? "Hide" : "Show"}
+          </button>
+        )}
+      </div>
     </label>
   );
 }
