@@ -9,12 +9,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
-import { getMyProfile, listAllProfiles } from "@/lib/profile.functions";
+import { getMyProfile, listAllProfiles, decideProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
 import { listInventory } from "@/lib/inventory.functions";
 import { listFactories } from "@/lib/factories.functions";
 import { syncAlerts } from "@/lib/alerts.functions";
-import { platformStats } from "@/lib/admin.functions";
+import { platformStats, setCompanyStatus } from "@/lib/admin.functions";
+import {
+  adminListUsers,
+  adminCreateUser,
+  adminUpdateUser,
+  adminDeleteUser,
+  adminSetPassword,
+} from "@/lib/admin-users.functions";
+import { PASSWORD_RULE, validatePassword } from "@/lib/password";
+
 import {
   generateSignals,
   severityColor,
