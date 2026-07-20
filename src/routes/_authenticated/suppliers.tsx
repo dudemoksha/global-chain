@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { Mark } from "@/components/site/mark";
+import { AlertBell } from "@/components/site/alert-bell";
 import { supabase } from "@/integrations/supabase/client";
 import {
   addSupplier,
@@ -14,6 +15,7 @@ import {
   removeSupplier,
 } from "@/lib/suppliers.functions";
 import { getMyProfile } from "@/lib/profile.functions";
+import { listMyWatches, toggleWatch } from "@/lib/alerts.functions";
 
 const meQuery = queryOptions({
   queryKey: ["me"],
@@ -26,6 +28,10 @@ const listQuery = queryOptions({
 const graphQuery = queryOptions({
   queryKey: ["suppliers", "graph"],
   queryFn: () => getMySupplyGraph(),
+});
+const watchesQuery = queryOptions({
+  queryKey: ["watches", "mine"],
+  queryFn: () => listMyWatches(),
 });
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
@@ -40,6 +46,7 @@ export const Route = createFileRoute("/_authenticated/suppliers")({
       context.queryClient.ensureQueryData(meQuery),
       context.queryClient.ensureQueryData(listQuery),
       context.queryClient.ensureQueryData(graphQuery),
+      context.queryClient.ensureQueryData(watchesQuery),
     ]);
   },
   component: SuppliersPage,
@@ -51,6 +58,8 @@ function SuppliersPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: rows } = useSuspenseQuery(listQuery);
   const { data: graph } = useSuspenseQuery(graphQuery);
+  const { data: watches } = useSuspenseQuery(watchesQuery);
+  const watchedSet = new Set(watches);
   const qc = useQueryClient();
   const router = useRouter();
   const [open, setOpen] = useState(false);
