@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      organizations: {
+        Row: {
+          country: string
+          created_at: string
+          display_name: string
+          id: string
+          industry: string
+          name_norm: string
+          updated_at: string
+        }
+        Insert: {
+          country?: string
+          created_at?: string
+          display_name: string
+          id?: string
+          industry?: string
+          name_norm: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          industry?: string
+          name_norm?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -68,6 +98,53 @@ export type Database = {
         }
         Relationships: []
       }
+      suppliers: {
+        Row: {
+          annual_spend_bucket: string
+          category: string
+          created_at: string
+          criticality: Database["public"]["Enums"]["criticality"]
+          id: string
+          lead_time_days: number | null
+          notes: string
+          owner_id: string
+          supplier_org_id: string
+          updated_at: string
+        }
+        Insert: {
+          annual_spend_bucket?: string
+          category?: string
+          created_at?: string
+          criticality?: Database["public"]["Enums"]["criticality"]
+          id?: string
+          lead_time_days?: number | null
+          notes?: string
+          owner_id: string
+          supplier_org_id: string
+          updated_at?: string
+        }
+        Update: {
+          annual_spend_bucket?: string
+          category?: string
+          created_at?: string
+          criticality?: Database["public"]["Enums"]["criticality"]
+          id?: string
+          lead_time_days?: number | null
+          notes?: string
+          owner_id?: string
+          supplier_org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suppliers_supplier_org_id_fkey"
+            columns: ["supplier_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -94,6 +171,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_supply_graph: {
+        Args: { _user_id: string }
+        Returns: {
+          category: string
+          criticality: Database["public"]["Enums"]["criticality"]
+          parent_org_id: string
+          supplier_country: string
+          supplier_industry: string
+          supplier_name: string
+          supplier_org_id: string
+          tier: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -101,9 +191,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_org_name: { Args: { _name: string }; Returns: string }
+      upsert_organization: {
+        Args: { _country: string; _industry: string; _name: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "operator"
+      criticality: "low" | "medium" | "high" | "critical"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -232,6 +328,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "operator"],
+      criticality: ["low", "medium", "high", "critical"],
     },
   },
 } as const
