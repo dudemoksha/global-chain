@@ -1850,23 +1850,25 @@ function UserActivityModal({
 }
 
 function ActionPill({ action }: { action: string }) {
-  const isLogin = action === "auth.login";
-  const isLogout = action === "auth.logout";
-  const cls = isLogin
-    ? "bg-primary/10 text-primary"
-    : isLogout
-      ? "bg-surface text-foreground"
-      : "bg-accent text-foreground";
-  const label = isLogin
-    ? "Login"
-    : isLogout
-      ? "Logout"
-      : action.replace(/^user\./, "").replace(/^company\./, "");
+  const map: Record<string, { label: string; cls: string }> = {
+    "auth.login": { label: "Login", cls: "bg-primary/10 text-primary" },
+    "auth.logout": { label: "Logout", cls: "bg-surface text-foreground" },
+    "user.create": { label: "User created", cls: "bg-accent text-foreground" },
+    "user.delete": { label: "User deleted", cls: "bg-accent text-foreground" },
+    "user.profile_update": { label: "Profile updated", cls: "bg-accent text-foreground" },
+    "user.password_reset": { label: "Password reset", cls: "bg-accent text-foreground" },
+    "user.password_change": { label: "Password changed", cls: "bg-accent text-foreground" },
+    "user.role_change": { label: "Role changed", cls: "bg-accent text-foreground" },
+    "user.approved": { label: "Approved", cls: "bg-primary/10 text-primary" },
+    "user.rejected": { label: "Rejected", cls: "bg-accent text-foreground" },
+  };
+  const entry = map[action] ?? {
+    label: action.replace(/^user\./, "").replace(/^company\./, "").replace(/_/g, " "),
+    cls: "bg-accent text-foreground",
+  };
   return (
-    <span
-      className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${cls}`}
-    >
-      {label}
+    <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${entry.cls}`}>
+      {entry.label}
     </span>
   );
 }
