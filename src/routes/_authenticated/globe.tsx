@@ -65,7 +65,14 @@ function GlobePage() {
 function GlobeBody({ selfName }: { selfName: string }) {
   const { data: suppliers } = useSuspenseQuery(suppliersQuery);
   const { data: graph } = useSuspenseQuery(graphQuery);
+  const liveQ = useQuery({
+    queryKey: ["live-events"],
+    queryFn: () => getLiveEvents(),
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  });
   const [focus, setFocus] = useState<string | null>(null);
+
 
   // Build node & arc datasets.
   const { nodes, arcs, signals } = useMemo(() => {
