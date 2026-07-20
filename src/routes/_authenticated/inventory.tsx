@@ -69,7 +69,7 @@ function InventoryPage() {
   }, [risks]);
 
   const create = useMutation({
-    mutationFn: (v: Parameters<typeof createInventory>[0]["data"]) => createInventory({ data: v }),
+    mutationFn: (v: SkuValues) => createInventory({ data: v }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["inventory-risks"] });
@@ -77,7 +77,7 @@ function InventoryPage() {
     },
   });
   const update = useMutation({
-    mutationFn: (v: Parameters<typeof updateInventory>[0]["data"]) => updateInventory({ data: v }),
+    mutationFn: (v: SkuValues & { id: string }) => updateInventory({ data: v }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inventory"] });
       setEditing(null);
