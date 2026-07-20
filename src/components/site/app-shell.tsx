@@ -19,9 +19,6 @@ const USER_NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
-  { to: "/admin/requests", label: "Requests" },
-  { to: "/admin/companies", label: "Companies" },
-  { to: "/admin/audit", label: "Audit" },
   { to: "/analytics", label: "Analytics" },
 ];
 

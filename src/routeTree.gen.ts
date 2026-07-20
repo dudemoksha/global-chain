@@ -24,9 +24,6 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
-import { Route as AuthenticatedAdminRequestsRouteImport } from './routes/_authenticated/admin.requests'
-import { Route as AuthenticatedAdminCompaniesRouteImport } from './routes/_authenticated/admin.companies'
-import { Route as AuthenticatedAdminAuditRouteImport } from './routes/_authenticated/admin.audit'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -102,23 +99,6 @@ const AuthenticatedAlertsRoute = AuthenticatedAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAdminRequestsRoute =
-  AuthenticatedAdminRequestsRouteImport.update({
-    id: '/admin/requests',
-    path: '/admin/requests',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAdminCompaniesRoute =
-  AuthenticatedAdminCompaniesRouteImport.update({
-    id: '/admin/companies',
-    path: '/admin/companies',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedAdminAuditRoute = AuthenticatedAdminAuditRouteImport.update({
-  id: '/admin/audit',
-  path: '/admin/audit',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -135,9 +115,6 @@ export interface FileRoutesByFullPath {
   '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/uploads': typeof AuthenticatedUploadsRoute
-  '/admin/audit': typeof AuthenticatedAdminAuditRoute
-  '/admin/companies': typeof AuthenticatedAdminCompaniesRoute
-  '/admin/requests': typeof AuthenticatedAdminRequestsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -154,9 +131,6 @@ export interface FileRoutesByTo {
   '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/uploads': typeof AuthenticatedUploadsRoute
-  '/admin/audit': typeof AuthenticatedAdminAuditRoute
-  '/admin/companies': typeof AuthenticatedAdminCompaniesRoute
-  '/admin/requests': typeof AuthenticatedAdminRequestsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -175,9 +149,6 @@ export interface FileRoutesById {
   '/_authenticated/simulation': typeof AuthenticatedSimulationRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/uploads': typeof AuthenticatedUploadsRoute
-  '/_authenticated/admin/audit': typeof AuthenticatedAdminAuditRoute
-  '/_authenticated/admin/companies': typeof AuthenticatedAdminCompaniesRoute
-  '/_authenticated/admin/requests': typeof AuthenticatedAdminRequestsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -196,9 +167,6 @@ export interface FileRouteTypes {
     | '/simulation'
     | '/suppliers'
     | '/uploads'
-    | '/admin/audit'
-    | '/admin/companies'
-    | '/admin/requests'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -215,9 +183,6 @@ export interface FileRouteTypes {
     | '/simulation'
     | '/suppliers'
     | '/uploads'
-    | '/admin/audit'
-    | '/admin/companies'
-    | '/admin/requests'
   id:
     | '__root__'
     | '/'
@@ -235,9 +200,6 @@ export interface FileRouteTypes {
     | '/_authenticated/simulation'
     | '/_authenticated/suppliers'
     | '/_authenticated/uploads'
-    | '/_authenticated/admin/audit'
-    | '/_authenticated/admin/companies'
-    | '/_authenticated/admin/requests'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -354,27 +316,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAlertsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/admin/requests': {
-      id: '/_authenticated/admin/requests'
-      path: '/admin/requests'
-      fullPath: '/admin/requests'
-      preLoaderRoute: typeof AuthenticatedAdminRequestsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/companies': {
-      id: '/_authenticated/admin/companies'
-      path: '/admin/companies'
-      fullPath: '/admin/companies'
-      preLoaderRoute: typeof AuthenticatedAdminCompaniesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/admin/audit': {
-      id: '/_authenticated/admin/audit'
-      path: '/admin/audit'
-      fullPath: '/admin/audit'
-      preLoaderRoute: typeof AuthenticatedAdminAuditRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
   }
 }
 
@@ -390,9 +331,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSimulationRoute: typeof AuthenticatedSimulationRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedUploadsRoute: typeof AuthenticatedUploadsRoute
-  AuthenticatedAdminAuditRoute: typeof AuthenticatedAdminAuditRoute
-  AuthenticatedAdminCompaniesRoute: typeof AuthenticatedAdminCompaniesRoute
-  AuthenticatedAdminRequestsRoute: typeof AuthenticatedAdminRequestsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -407,9 +345,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSimulationRoute: AuthenticatedSimulationRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedUploadsRoute: AuthenticatedUploadsRoute,
-  AuthenticatedAdminAuditRoute: AuthenticatedAdminAuditRoute,
-  AuthenticatedAdminCompaniesRoute: AuthenticatedAdminCompaniesRoute,
-  AuthenticatedAdminRequestsRoute: AuthenticatedAdminRequestsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -424,13 +359,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
