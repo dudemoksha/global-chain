@@ -77,7 +77,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       await Promise.all([
         context.queryClient.ensureQueryData(adminStatsQuery).catch(() => null),
         context.queryClient.ensureQueryData(adminProfilesQuery).catch(() => []),
+        context.queryClient.ensureQueryData(adminUsersQuery).catch(() => []),
       ]);
+
     } else if (me.profile?.is_approved) {
       await Promise.all([
         context.queryClient.ensureQueryData(suppliersQuery).catch(() => []),
