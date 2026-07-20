@@ -21,7 +21,17 @@ const graphQuery = queryOptions({
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard · Global-Chain" }, { name: "robots", content: "noindex" }] }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(meQuery),
+  loader: async ({ context }) => {
+    // Always load the profile. Supplier queries only run once approved.
+    const me = await context.queryClient.ensureQueryData(meQuery);
+    if (me.profile?.is_approved || me.isAdmin) {
+      await Promise.all([
+        context.queryClient.ensureQueryData(suppliersQuery).catch(() => []),
+        context.queryClient.ensureQueryData(graphQuery).catch(() => []),
+      ]);
+    }
+    return null;
+  },
   component: Dashboard,
 });
 
@@ -50,46 +60,92 @@ function Dashboard() {
         </h1>
         <p className="mt-3 max-w-2xl text-[14px] text-muted-foreground">
           Your organisation <span className="text-foreground">{profile.legal_name}</span> is
-          active on Global-Chain. The supplier graph, risk feed, and simulation
-          surface arrive in the next release.
+          active on Global-Chain. Declare your suppliers to unlock hidden
+          downstream exposure.
         </p>
 
-        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {[
-            { k: "Tier-1 suppliers", v: "0", h: "Add via CSV or connector" },
-            { k: "Active signals", v: "0", h: "Feed will populate here" },
-            { k: "Simulations", v: "0", h: "Sandbox arrives in v0.2" },
-          ].map((c) => (
-            <div key={c.k} className="rounded-md border border-border bg-card p-5">
-              <div className="mono-label">{c.k}</div>
-              <div className="mt-2 font-display text-[28px] font-medium">{c.v}</div>
-              <div className="mt-2 text-[12px] text-muted-foreground">{c.h}</div>
-            </div>
-          ))}
-        </div>
+        <SupplierStats />
 
-        {isAdmin && (
-          <div className="mt-10 rounded-md border border-border bg-surface p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="mono-label !text-primary">Admin</div>
-                <div className="mt-1 text-[14px] font-medium">
-                  Access-request queue
-                </div>
-              </div>
-              <Link
-                to="/admin/requests"
-                className="rounded-md bg-foreground px-3 py-1.5 text-[13px] font-medium text-background hover:opacity-90"
-              >
-                Open queue →
-              </Link>
-            </div>
-          </div>
-        )}
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            to="/suppliers"
+            className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
+          >
+            Manage suppliers →
+          </Link>
+          {isAdmin && (
+            <Link
+              to="/admin/requests"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-[13px] font-medium text-foreground hover:bg-surface"
+            >
+              Admin queue
+            </Link>
+          )}
+        </div>
       </div>
     </AppShell>
   );
 }
+
+function SupplierStats() {
+  const { data: suppliers } = useSuspenseQuery(suppliersQuery);
+  const { data: graph } = useSuspenseQuery(graphQuery);
+  const tier2 = new Set(
+    graph.filter((g) => g.tier === 2).map((g) => g.supplier_org_id),
+  );
+  const critical = suppliers.filter((s) => s.criticality === "critical").length;
+  return (
+    <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <StatCard
+        k="Tier-1 suppliers"
+        v={suppliers.length.toString()}
+        hint={suppliers.length === 0 ? "Add your first partner" : "Directly declared"}
+      />
+      <StatCard
+        k="Tier-2 exposure"
+        v={tier2.size.toString()}
+        hint={
+          tier2.size > 0
+            ? "Auto-resolved via linked operators"
+            : "Grows as suppliers join Global-Chain"
+        }
+        emphasis={tier2.size > 0}
+      />
+      <StatCard
+        k="Critical dependencies"
+        v={critical.toString()}
+        hint={critical > 0 ? "Marked critical" : "None flagged"}
+      />
+    </div>
+  );
+}
+
+function StatCard({
+  k,
+  v,
+  hint,
+  emphasis,
+}: {
+  k: string;
+  v: string;
+  hint?: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-md border p-5 ${
+        emphasis ? "border-primary/40 bg-accent" : "border-border bg-card"
+      }`}
+    >
+      <div className="mono-label">{k}</div>
+      <div className="mt-2 font-display text-[28px] font-medium">{v}</div>
+      {hint && (
+        <div className="mt-2 text-[12px] text-muted-foreground">{hint}</div>
+      )}
+    </div>
+  );
+}
+
 
 function AppShell({
   children,
