@@ -318,9 +318,12 @@ export type Database = {
           created_at: string
           criticality: Database["public"]["Enums"]["criticality"]
           id: string
+          is_stopped: boolean
           lead_time_days: number | null
           notes: string
           owner_id: string
+          product: string
+          stopped_at: string | null
           supplier_org_id: string
           updated_at: string
         }
@@ -330,9 +333,12 @@ export type Database = {
           created_at?: string
           criticality?: Database["public"]["Enums"]["criticality"]
           id?: string
+          is_stopped?: boolean
           lead_time_days?: number | null
           notes?: string
           owner_id: string
+          product?: string
+          stopped_at?: string | null
           supplier_org_id: string
           updated_at?: string
         }
@@ -342,9 +348,12 @@ export type Database = {
           created_at?: string
           criticality?: Database["public"]["Enums"]["criticality"]
           id?: string
+          is_stopped?: boolean
           lead_time_days?: number | null
           notes?: string
           owner_id?: string
+          product?: string
+          stopped_at?: string | null
           supplier_org_id?: string
           updated_at?: string
         }
@@ -539,6 +548,14 @@ export type Database = {
         }[]
       }
       get_user_for_org: { Args: { _org_id: string }; Returns: string }
+      list_org_products: {
+        Args: { _org_id: string }
+        Returns: {
+          name: string
+          sku: string
+          unit: string
+        }[]
+      }
       normalize_org_name: { Args: { _name: string }; Returns: string }
       upsert_organization: {
         Args: { _country: string; _industry: string; _name: string }
