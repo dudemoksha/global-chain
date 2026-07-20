@@ -262,14 +262,25 @@ function RegisterPage() {
                     onChange={set("workEmail")}
                     placeholder="ines@acme.co"
                   />
-                  <Field
-                    className="sm:col-span-2"
-                    label="Password (min. 8 characters)"
-                    type="password"
-                    value={form.password}
-                    onChange={set("password")}
-                    placeholder="••••••••"
-                  />
+                  <div className="sm:col-span-2">
+                    <Field
+                      label="Password"
+                      type="password"
+                      value={form.password}
+                      onChange={set("password")}
+                      placeholder="••••••••"
+                    />
+                    <p
+                      className={`mt-1.5 text-[11.5px] ${
+                        pwError && form.password
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {pwError && form.password ? pwError : PASSWORD_RULE}
+                    </p>
+                  </div>
+
                   <div className="sm:col-span-2">
                     <div className="mono-label mb-1.5">
                       Brief note (optional)
