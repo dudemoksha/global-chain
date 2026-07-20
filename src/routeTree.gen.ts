@@ -17,10 +17,12 @@ import { Route as AuthenticatedUploadsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedSimulationRouteImport } from './routes/_authenticated/simulation'
 import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
+import { Route as AuthenticatedRequestsRouteImport } from './routes/_authenticated/requests'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedGlobeRouteImport } from './routes/_authenticated/globe'
 import { Route as AuthenticatedFactoriesRouteImport } from './routes/_authenticated/factories'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAlertsRouteImport } from './routes/_authenticated/alerts'
@@ -64,6 +66,11 @@ const AuthenticatedSignalsRoute = AuthenticatedSignalsRouteImport.update({
   path: '/signals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRequestsRoute = AuthenticatedRequestsRouteImport.update({
+  id: '/requests',
+  path: '/requests',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -82,6 +89,11 @@ const AuthenticatedFactoriesRoute = AuthenticatedFactoriesRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAssistantRoute = AuthenticatedAssistantRouteImport.update({
@@ -107,10 +119,12 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AuthenticatedAlertsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
+  '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/factories': typeof AuthenticatedFactoriesRoute
   '/globe': typeof AuthenticatedGlobeRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/requests': typeof AuthenticatedRequestsRoute
   '/signals': typeof AuthenticatedSignalsRoute
   '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
@@ -123,10 +137,12 @@ export interface FileRoutesByTo {
   '/alerts': typeof AuthenticatedAlertsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
+  '/customers': typeof AuthenticatedCustomersRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/factories': typeof AuthenticatedFactoriesRoute
   '/globe': typeof AuthenticatedGlobeRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/requests': typeof AuthenticatedRequestsRoute
   '/signals': typeof AuthenticatedSignalsRoute
   '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
@@ -141,10 +157,12 @@ export interface FileRoutesById {
   '/_authenticated/alerts': typeof AuthenticatedAlertsRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assistant': typeof AuthenticatedAssistantRoute
+  '/_authenticated/customers': typeof AuthenticatedCustomersRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/factories': typeof AuthenticatedFactoriesRoute
   '/_authenticated/globe': typeof AuthenticatedGlobeRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
+  '/_authenticated/requests': typeof AuthenticatedRequestsRoute
   '/_authenticated/signals': typeof AuthenticatedSignalsRoute
   '/_authenticated/simulation': typeof AuthenticatedSimulationRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
@@ -159,10 +177,12 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/analytics'
     | '/assistant'
+    | '/customers'
     | '/dashboard'
     | '/factories'
     | '/globe'
     | '/inventory'
+    | '/requests'
     | '/signals'
     | '/simulation'
     | '/suppliers'
@@ -175,10 +195,12 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/analytics'
     | '/assistant'
+    | '/customers'
     | '/dashboard'
     | '/factories'
     | '/globe'
     | '/inventory'
+    | '/requests'
     | '/signals'
     | '/simulation'
     | '/suppliers'
@@ -192,10 +214,12 @@ export interface FileRouteTypes {
     | '/_authenticated/alerts'
     | '/_authenticated/analytics'
     | '/_authenticated/assistant'
+    | '/_authenticated/customers'
     | '/_authenticated/dashboard'
     | '/_authenticated/factories'
     | '/_authenticated/globe'
     | '/_authenticated/inventory'
+    | '/_authenticated/requests'
     | '/_authenticated/signals'
     | '/_authenticated/simulation'
     | '/_authenticated/suppliers'
@@ -267,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSignalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/requests': {
+      id: '/_authenticated/requests'
+      path: '/requests'
+      fullPath: '/requests'
+      preLoaderRoute: typeof AuthenticatedRequestsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/inventory': {
       id: '/_authenticated/inventory'
       path: '/inventory'
@@ -293,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/customers': {
+      id: '/_authenticated/customers'
+      path: '/customers'
+      fullPath: '/customers'
+      preLoaderRoute: typeof AuthenticatedCustomersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/assistant': {
@@ -323,10 +361,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAlertsRoute: typeof AuthenticatedAlertsRoute
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
+  AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedFactoriesRoute: typeof AuthenticatedFactoriesRoute
   AuthenticatedGlobeRoute: typeof AuthenticatedGlobeRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
+  AuthenticatedRequestsRoute: typeof AuthenticatedRequestsRoute
   AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
   AuthenticatedSimulationRoute: typeof AuthenticatedSimulationRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
@@ -337,10 +377,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAlertsRoute: AuthenticatedAlertsRoute,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAssistantRoute: AuthenticatedAssistantRoute,
+  AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedFactoriesRoute: AuthenticatedFactoriesRoute,
   AuthenticatedGlobeRoute: AuthenticatedGlobeRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
+  AuthenticatedRequestsRoute: AuthenticatedRequestsRoute,
   AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
   AuthenticatedSimulationRoute: AuthenticatedSimulationRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,

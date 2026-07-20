@@ -341,6 +341,72 @@ export type Database = {
           },
         ]
       }
+      trade_requests: {
+        Row: {
+          category: string
+          created_at: string
+          direction: Database["public"]["Enums"]["request_direction"]
+          from_org_id: string | null
+          from_user_id: string
+          id: string
+          message: string
+          product: string
+          quantity: string
+          responded_at: string | null
+          status: Database["public"]["Enums"]["request_status"]
+          to_org_id: string
+          to_user_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          direction: Database["public"]["Enums"]["request_direction"]
+          from_org_id?: string | null
+          from_user_id: string
+          id?: string
+          message?: string
+          product?: string
+          quantity?: string
+          responded_at?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          to_org_id: string
+          to_user_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          direction?: Database["public"]["Enums"]["request_direction"]
+          from_org_id?: string | null
+          from_user_id?: string
+          id?: string
+          message?: string
+          product?: string
+          quantity?: string
+          responded_at?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          to_org_id?: string
+          to_user_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_requests_from_org_id_fkey"
+            columns: ["from_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trade_requests_to_org_id_fkey"
+            columns: ["to_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       upload_history: {
         Row: {
           created_at: string
@@ -413,6 +479,7 @@ export type Database = {
           tier: number
         }[]
       }
+      get_user_for_org: { Args: { _org_id: string }; Returns: string }
       normalize_org_name: { Args: { _name: string }; Returns: string }
       upsert_organization: {
         Args: { _country: string; _industry: string; _name: string }
@@ -422,6 +489,8 @@ export type Database = {
     Enums: {
       app_role: "admin" | "operator"
       criticality: "low" | "medium" | "high" | "critical"
+      request_direction: "buy" | "sell"
+      request_status: "pending" | "accepted" | "rejected" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -551,6 +620,8 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "operator"],
       criticality: ["low", "medium", "high", "critical"],
+      request_direction: ["buy", "sell"],
+      request_status: ["pending", "accepted", "rejected", "cancelled"],
     },
   },
 } as const
