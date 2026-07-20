@@ -184,13 +184,6 @@ export type Database = {
           tier: number
         }[]
       }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
       normalize_org_name: { Args: { _name: string }; Returns: string }
       upsert_organization: {
         Args: { _country: string; _industry: string; _name: string }
