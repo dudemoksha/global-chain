@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { ClientOnly } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
+import { getLiveEvents } from "@/lib/live-signals.functions";
 import { countryToLatLng, jitter } from "@/lib/country-coords";
 import { generateSignals, severityColor } from "@/lib/risk-signals";
+
 
 const GlobeView = lazy(() => import("@/components/site/globe-view"));
 
