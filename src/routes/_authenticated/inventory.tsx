@@ -29,8 +29,10 @@ function InventoryPage() {
   const [open, setOpen] = useState(false);
 
   const upsert = useMutation({
-    mutationFn: (v: Parameters<typeof upsertInventory>[0] extends { data: infer T } ? T : never) =>
-      upsertInventory({ data: v as any }),
+    mutationFn: (v: {
+      sku: string; name: string; warehouse: string;
+      current_stock: number; safety_stock: number; reorder_level: number; unit: string;
+    }) => upsertInventory({ data: v }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["inventory"] }); setOpen(false); },
   });
   const del = useMutation({
