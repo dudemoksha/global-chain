@@ -1,14 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import {
+  queryOptions,
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
+import { syncAlerts } from "@/lib/alerts.functions";
 import { generateSignals, severityColor, severityLabel } from "@/lib/risk-signals";
 import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 import { useRouter } from "@tanstack/react-router";
+
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const suppliersQuery = queryOptions({
