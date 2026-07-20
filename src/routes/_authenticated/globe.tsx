@@ -125,7 +125,21 @@ function GlobeBody({ selfName }: { selfName: string }) {
     const signalOrgs = Array.from(nodeMap.values())
       .filter((n) => n.tier !== 0)
       .map((n) => ({ id: n.id, name: n.name, country: n.country }));
-    const signals = generateSignals(signalOrgs);
+    const mockSignals = generateSignals(signalOrgs);
+
+    // Fold in live GDELT/USGS events touching these nodes.
+    const liveSignals = (liveQ.data ?? []).map((e) => ({
+      id: e.id,
+      country: e.country,
+      region: e.region,
+      kind: e.kind as ReturnType<typeof generateSignals>[number]["kind"],
+      severity: e.severity as ReturnType<typeof generateSignals>[number]["severity"],
+      headline: e.headline,
+      detail: e.detail,
+      affectsOrgIds: e.affectsOrgIds,
+      hoursAgo: e.hoursAgo,
+    }));
+    const signals = [...liveSignals, ...mockSignals];
 
     // Map impacted org → worst severity.
     const impactRank: Record<string, number> = {};
@@ -137,6 +151,7 @@ function GlobeBody({ selfName }: { selfName: string }) {
         if (sc > cur) impactRank[oid] = sc;
       });
     });
+
 
     const nodeList = Array.from(nodeMap.values()).map((n) => ({
       ...n,
