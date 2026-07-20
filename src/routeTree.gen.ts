@@ -14,6 +14,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
+import { Route as AuthenticatedSimulationRouteImport } from './routes/_authenticated/simulation'
+import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
+import { Route as AuthenticatedGlobeRouteImport } from './routes/_authenticated/globe'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRequestsRouteImport } from './routes/_authenticated/admin.requests'
 
@@ -41,6 +44,21 @@ const AuthenticatedSuppliersRoute = AuthenticatedSuppliersRouteImport.update({
   path: '/suppliers',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSimulationRoute = AuthenticatedSimulationRouteImport.update({
+  id: '/simulation',
+  path: '/simulation',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSignalsRoute = AuthenticatedSignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedGlobeRoute = AuthenticatedGlobeRouteImport.update({
+  id: '/globe',
+  path: '/globe',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -58,6 +76,9 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/globe': typeof AuthenticatedGlobeRoute
+  '/signals': typeof AuthenticatedSignalsRoute
+  '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/admin/requests': typeof AuthenticatedAdminRequestsRoute
 }
@@ -66,6 +87,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/globe': typeof AuthenticatedGlobeRoute
+  '/signals': typeof AuthenticatedSignalsRoute
+  '/simulation': typeof AuthenticatedSimulationRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/admin/requests': typeof AuthenticatedAdminRequestsRoute
 }
@@ -76,6 +100,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/globe': typeof AuthenticatedGlobeRoute
+  '/_authenticated/signals': typeof AuthenticatedSignalsRoute
+  '/_authenticated/simulation': typeof AuthenticatedSimulationRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/admin/requests': typeof AuthenticatedAdminRequestsRoute
 }
@@ -86,6 +113,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/dashboard'
+    | '/globe'
+    | '/signals'
+    | '/simulation'
     | '/suppliers'
     | '/admin/requests'
   fileRoutesByTo: FileRoutesByTo
@@ -94,6 +124,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/dashboard'
+    | '/globe'
+    | '/signals'
+    | '/simulation'
     | '/suppliers'
     | '/admin/requests'
   id:
@@ -103,6 +136,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authenticated/dashboard'
+    | '/_authenticated/globe'
+    | '/_authenticated/signals'
+    | '/_authenticated/simulation'
     | '/_authenticated/suppliers'
     | '/_authenticated/admin/requests'
   fileRoutesById: FileRoutesById
@@ -151,6 +187,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSuppliersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/simulation': {
+      id: '/_authenticated/simulation'
+      path: '/simulation'
+      fullPath: '/simulation'
+      preLoaderRoute: typeof AuthenticatedSimulationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/signals': {
+      id: '/_authenticated/signals'
+      path: '/signals'
+      fullPath: '/signals'
+      preLoaderRoute: typeof AuthenticatedSignalsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/globe': {
+      id: '/_authenticated/globe'
+      path: '/globe'
+      fullPath: '/globe'
+      preLoaderRoute: typeof AuthenticatedGlobeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -170,12 +227,18 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedGlobeRoute: typeof AuthenticatedGlobeRoute
+  AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
+  AuthenticatedSimulationRoute: typeof AuthenticatedSimulationRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedAdminRequestsRoute: typeof AuthenticatedAdminRequestsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedGlobeRoute: AuthenticatedGlobeRoute,
+  AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
+  AuthenticatedSimulationRoute: AuthenticatedSimulationRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedAdminRequestsRoute: AuthenticatedAdminRequestsRoute,
 }
