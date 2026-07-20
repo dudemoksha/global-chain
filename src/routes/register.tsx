@@ -90,6 +90,8 @@ function RegisterPage() {
       return;
     }
     setBusy(true);
+    const { error } = await supabase.auth.signUp({
+
 
       email: form.workEmail,
       password: form.password,
