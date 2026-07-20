@@ -1398,12 +1398,10 @@ function UserFormModal({
         </ModalField>
         {mode === "create" && (
           <ModalField label="Password">
-            <input
-              type="password"
+            <PasswordInput
               required
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className={inputCls}
+              onChange={(v) => setForm({ ...form, password: v })}
             />
             <p
               className={`mt-1 text-[11px] ${
@@ -1548,12 +1546,10 @@ function PasswordModal({
     <ModalShell title={`Reset password · ${user.work_email}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
         <ModalField label="New password">
-          <input
-            type="password"
+          <PasswordInput
             required
             value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            className={inputCls}
+            onChange={(v) => setPw(v)}
           />
           <p
             className={`mt-1 text-[11px] ${
