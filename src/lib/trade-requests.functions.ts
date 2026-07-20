@@ -53,6 +53,21 @@ export const searchOrganizations = createServerFn({ method: "POST" })
     return results;
   });
 
+/** List the products (SKUs) that a given organisation's owner sells. */
+export const listOrgProducts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) =>
+    z.object({ org_id: z.string().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin.rpc("list_org_products", {
+      _org_id: data.org_id,
+    });
+    if (error) throw error;
+    return (rows ?? []) as Array<{ sku: string; name: string; unit: string }>;
+  });
+
 /** Send a trade request to an organization. Direction: buy = "I want to buy from them". */
 export const sendTradeRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
