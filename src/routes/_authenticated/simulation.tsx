@@ -10,6 +10,7 @@ import {
   type SignalKind,
   type Severity,
 } from "@/lib/risk-signals";
+import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const suppliersQuery = queryOptions({
@@ -116,21 +117,23 @@ function SimBody() {
       orgs.map((o) => ({ id: o.id, name: o.name, country: o.country })),
       { country, kind, severity },
     );
-    // Best-alternative suggestions: pick suppliers of same industry not in affected country.
-    const affectedIndustries = new Set(
-      suppliers
-        .filter((s) => s.organizations?.country === country && s.organizations?.industry)
-        .map((s) => s.organizations!.industry),
+    // Determine affected industry + category to drive cross-operator recommendations.
+    const affected = suppliers.filter(
+      (s) => s.organizations?.country === country,
     );
-    const alternatives = suppliers
-      .filter(
-        (s) =>
-          s.organizations &&
-          s.organizations.country !== country &&
-          affectedIndustries.has(s.organizations.industry),
-      )
-      .slice(0, 4);
-    return { impacted, t1, t2, signals: signals.filter((s) => s.id.startsWith("sim-") || s.country === country), alternatives };
+    const industry = affected.find((s) => s.organizations?.industry)?.organizations
+      ?.industry ?? "";
+    const category = affected.find((s) => s.category)?.category ?? "";
+    return {
+      impacted,
+      t1,
+      t2,
+      signals: signals.filter(
+        (s) => s.id.startsWith("sim-") || s.country === country,
+      ),
+      industry,
+      category,
+    };
   }, [ran, country, kind, severity, orgs, suppliers]);
 
   return (
@@ -266,33 +269,22 @@ function SimBody() {
                 )}
               </Section>
 
-              <Section title="Alternative suppliers">
-                {result.alternatives.length === 0 ? (
-                  <Empty msg="No obvious alternates in your directory. Add more Tier-1 partners to widen coverage." />
-                ) : (
-                  <ul className="grid gap-2 sm:grid-cols-2">
-                    {result.alternatives.map((s) => (
-                      <li
-                        key={s.id}
-                        className="rounded-md border border-border p-3"
-                      >
-                        <div className="text-[13.5px] font-medium">
-                          {s.organizations?.display_name}
-                        </div>
-                        <div className="mt-0.5 text-[12px] text-muted-foreground">
-                          {s.organizations?.country} · {s.organizations?.industry || "—"}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <RecommendationsPanel
+                title="Recommended alternatives"
+                subtitle={`Cross-operator matches for ${result.industry || "affected industry"}, avoiding ${country}.`}
+                industry={result.industry}
+                category={result.category}
+                avoidCountry={country}
+                limit={6}
+              />
+              <div>
                 <Link
                   to="/suppliers"
-                  className="mt-3 inline-flex text-[12.5px] font-medium text-primary hover:underline"
+                  className="inline-flex text-[12.5px] font-medium text-primary hover:underline"
                 >
                   Manage supplier directory →
                 </Link>
-              </Section>
+              </div>
             </div>
           )}
         </div>
