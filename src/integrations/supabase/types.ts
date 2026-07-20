@@ -67,6 +67,117 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          id: string
+          meta: Json
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          meta?: Json
+          target_id?: string
+          target_type?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          meta?: Json
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: []
+      }
+      factories: {
+        Row: {
+          capacity_units: number
+          city: string
+          country: string
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          products: string[]
+          updated_at: string
+          warehouse: string
+        }
+        Insert: {
+          capacity_units?: number
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          products?: string[]
+          updated_at?: string
+          warehouse?: string
+        }
+        Update: {
+          capacity_units?: number
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          products?: string[]
+          updated_at?: string
+          warehouse?: string
+        }
+        Relationships: []
+      }
+      inventory_items: {
+        Row: {
+          created_at: string
+          current_stock: number
+          id: string
+          name: string
+          owner_id: string
+          reorder_level: number
+          safety_stock: number
+          sku: string
+          unit: string
+          updated_at: string
+          warehouse: string
+        }
+        Insert: {
+          created_at?: string
+          current_stock?: number
+          id?: string
+          name: string
+          owner_id: string
+          reorder_level?: number
+          safety_stock?: number
+          sku: string
+          unit?: string
+          updated_at?: string
+          warehouse?: string
+        }
+        Update: {
+          created_at?: string
+          current_stock?: number
+          id?: string
+          name?: string
+          owner_id?: string
+          reorder_level?: number
+          safety_stock?: number
+          sku?: string
+          unit?: string
+          updated_at?: string
+          warehouse?: string
+        }
+        Relationships: []
+      }
       organizations: {
         Row: {
           country: string
@@ -111,6 +222,7 @@ export type Database = {
           rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          status: string
           tier_role: string
           updated_at: string
           work_email: string
@@ -128,6 +240,7 @@ export type Database = {
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          status?: string
           tier_role?: string
           updated_at?: string
           work_email?: string
@@ -145,6 +258,7 @@ export type Database = {
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          status?: string
           tier_role?: string
           updated_at?: string
           work_email?: string
@@ -226,6 +340,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      upload_history: {
+        Row: {
+          created_at: string
+          errors: Json
+          filename: string
+          id: string
+          kind: string
+          owner_id: string
+          rows_failed: number
+          rows_ok: number
+        }
+        Insert: {
+          created_at?: string
+          errors?: Json
+          filename: string
+          id?: string
+          kind: string
+          owner_id: string
+          rows_failed?: number
+          rows_ok?: number
+        }
+        Update: {
+          created_at?: string
+          errors?: Json
+          filename?: string
+          id?: string
+          kind?: string
+          owner_id?: string
+          rows_failed?: number
+          rows_ok?: number
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
