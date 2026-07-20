@@ -1,14 +1,15 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { AppShell } from "@/components/site/app-shell";
 import { Mark } from "@/components/site/mark";
+import { supabase } from "@/integrations/supabase/client";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
-import { supabase } from "@/integrations/supabase/client";
+import { generateSignals, severityColor, severityLabel } from "@/lib/risk-signals";
+import { useRouter } from "@tanstack/react-router";
 
-const meQuery = queryOptions({
-  queryKey: ["me"],
-  queryFn: () => getMyProfile(),
-});
+const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const suppliersQuery = queryOptions({
   queryKey: ["suppliers", "mine"],
   queryFn: () => listMySuppliers(),
@@ -18,11 +19,14 @@ const graphQuery = queryOptions({
   queryFn: () => getMySupplyGraph(),
 });
 
-
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard · Global-Chain" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({
+    meta: [
+      { title: "Dashboard · Global-Chain" },
+      { name: "robots", content: "noindex" },
+    ],
+  }),
   loader: async ({ context }) => {
-    // Always load the profile. Supplier queries only run once approved.
     const me = await context.queryClient.ensureQueryData(meQuery);
     if (me.profile?.is_approved || me.isAdmin) {
       await Promise.all([
@@ -52,36 +56,20 @@ function Dashboard() {
   }
 
   return (
-    <AppShell isAdmin={isAdmin} email={profile.work_email} onSignOut={signOut}>
-      <div className="mx-auto max-w-[1240px] px-6 py-14">
-        <div className="mono-label">§ Dashboard</div>
-        <h1 className="mt-3 font-display text-[36px] font-medium tracking-tight">
+    <AppShell isAdmin={isAdmin} email={profile.work_email}>
+      <div className="mx-auto max-w-[1240px] px-6 py-12">
+        <div className="mono-label">§ Operations</div>
+        <h1 className="mt-3 font-display text-[36px] font-medium leading-tight tracking-tight">
           Welcome, {profile.full_name || profile.work_email}.
         </h1>
         <p className="mt-3 max-w-2xl text-[14px] text-muted-foreground">
-          Your organisation <span className="text-foreground">{profile.legal_name}</span> is
-          active on Global-Chain. Declare your suppliers to unlock hidden
-          downstream exposure.
+          <span className="text-foreground">{profile.legal_name}</span> is active
+          on Global-Chain. Declare suppliers to unlock hidden downstream exposure
+          and continuous risk monitoring.
         </p>
 
         <SupplierStats />
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            to="/suppliers"
-            className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
-          >
-            Manage suppliers →
-          </Link>
-          {isAdmin && (
-            <Link
-              to="/admin/requests"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-[13px] font-medium text-foreground hover:bg-surface"
-            >
-              Admin queue
-            </Link>
-          )}
-        </div>
+        <MainGrid />
       </div>
     </AppShell>
   );
@@ -94,41 +82,140 @@ function SupplierStats() {
     graph.filter((g) => g.tier === 2).map((g) => g.supplier_org_id),
   );
   const critical = suppliers.filter((s) => s.criticality === "critical").length;
+  const countries = new Set(
+    suppliers.map((s) => s.organizations?.country).filter(Boolean),
+  );
   return (
-    <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <StatCard
-        k="Tier-1 suppliers"
-        v={suppliers.length.toString()}
-        hint={suppliers.length === 0 ? "Add your first partner" : "Directly declared"}
-      />
+    <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <StatCard k="Tier-1 suppliers" v={suppliers.length.toString()} />
       <StatCard
         k="Tier-2 exposure"
         v={tier2.size.toString()}
-        hint={
-          tier2.size > 0
-            ? "Auto-resolved via linked operators"
-            : "Grows as suppliers join Global-Chain"
-        }
         emphasis={tier2.size > 0}
       />
-      <StatCard
-        k="Critical dependencies"
-        v={critical.toString()}
-        hint={critical > 0 ? "Marked critical" : "None flagged"}
-      />
+      <StatCard k="Critical dependencies" v={critical.toString()} />
+      <StatCard k="Countries covered" v={countries.size.toString()} />
     </div>
+  );
+}
+
+function MainGrid() {
+  const { data: suppliers } = useSuspenseQuery(suppliersQuery);
+  const { data: graph } = useSuspenseQuery(graphQuery);
+
+  const signals = useMemo(() => {
+    const orgs: Array<{ id: string; name: string; country: string }> = [];
+    suppliers.forEach((s) => {
+      if (s.organizations)
+        orgs.push({
+          id: s.organizations.id,
+          name: s.organizations.display_name,
+          country: s.organizations.country,
+        });
+    });
+    graph
+      .filter((g) => g.tier === 2)
+      .forEach((g) =>
+        orgs.push({
+          id: g.supplier_org_id,
+          name: g.supplier_name,
+          country: g.supplier_country,
+        }),
+      );
+    return generateSignals(orgs);
+  }, [suppliers, graph]);
+
+  return (
+    <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="rounded-md border border-border bg-card p-6">
+        <div className="flex items-center justify-between">
+          <div className="mono-label">Priority signals</div>
+          <Link to="/signals" className="text-[12px] font-medium text-primary hover:underline">
+            View feed →
+          </Link>
+        </div>
+        {signals.length === 0 ? (
+          <div className="mt-6 rounded-md border border-dashed border-border p-8 text-center text-[13px] text-muted-foreground">
+            No signals yet. Add suppliers to activate continuous monitoring.
+          </div>
+        ) : (
+          <ul className="mt-4 divide-y divide-border">
+            {signals.slice(0, 5).map((s) => (
+              <li key={s.id} className="py-3">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: severityColor(s.severity) }}
+                  />
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <span className="text-[13.5px] font-medium">{s.headline}</span>
+                      <span className="mono-label">
+                        {severityLabel(s.severity)} · {s.kind}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-muted-foreground">
+                      {s.country} · {s.hoursAgo}h ago · touches {s.affectsOrgIds.length} node{s.affectsOrgIds.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <div className="rounded-md border border-border bg-card p-6">
+          <div className="mono-label">Quick actions</div>
+          <div className="mt-4 flex flex-col gap-2">
+            <ActionLink to="/suppliers" label="Manage suppliers" />
+            <ActionLink to="/globe" label="Open network globe" />
+            <ActionLink to="/simulation" label="Run a what-if" />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-border bg-card p-6">
+          <div className="mono-label">Recent additions</div>
+          {suppliers.length === 0 ? (
+            <p className="mt-3 text-[13px] text-muted-foreground">
+              No suppliers declared yet.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {suppliers.slice(0, 4).map((s) => (
+                <li key={s.id} className="flex items-center justify-between text-[13px]">
+                  <span className="truncate">{s.organizations?.display_name}</span>
+                  <span className="mono-label shrink-0">{s.criticality}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionLink({ to, label }: { to: string; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-[13px] font-medium hover:bg-surface"
+    >
+      <span>{label}</span>
+      <span className="text-muted-foreground">→</span>
+    </Link>
   );
 }
 
 function StatCard({
   k,
   v,
-  hint,
   emphasis,
 }: {
   k: string;
   v: string;
-  hint?: string;
   emphasis?: boolean;
 }) {
   return (
@@ -139,71 +226,6 @@ function StatCard({
     >
       <div className="mono-label">{k}</div>
       <div className="mt-2 font-display text-[28px] font-medium">{v}</div>
-      {hint && (
-        <div className="mt-2 text-[12px] text-muted-foreground">{hint}</div>
-      )}
-    </div>
-  );
-}
-
-
-function AppShell({
-  children,
-  isAdmin,
-  email,
-  onSignOut,
-}: {
-  children: React.ReactNode;
-  isAdmin: boolean;
-  email: string;
-  onSignOut: () => void;
-}) {
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-14 max-w-[1240px] items-center justify-between px-6">
-          <Link to="/dashboard">
-            <Mark />
-          </Link>
-          <nav className="hidden items-center gap-6 md:flex">
-            <Link
-              to="/dashboard"
-              className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{ className: "!text-primary" }}
-            >
-              Dashboard
-            </Link>
-            <Link
-              to="/suppliers"
-              className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{ className: "!text-primary" }}
-            >
-              Suppliers
-            </Link>
-            {isAdmin && (
-              <Link
-                to="/admin/requests"
-                className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-                activeProps={{ className: "!text-primary" }}
-              >
-                Admin
-              </Link>
-            )}
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <span className="mono-label hidden sm:inline">{email}</span>
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium text-foreground hover:bg-surface"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
-      {children}
     </div>
   );
 }
