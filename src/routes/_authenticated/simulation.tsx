@@ -59,62 +59,77 @@ function SimulationPage() {
 
 const KINDS: SignalKind[] = ["geopolitical", "climate", "logistics", "cyber", "regulatory"];
 const SEVS: Severity[] = ["medium", "high", "critical"];
-
-type Mode = "country" | "company";
+const CRIT_WEIGHT: Record<string, number> = { critical: 1, high: 0.75, medium: 0.5, low: 0.25 };
+const SEV_WEIGHT: Record<Severity, number> = { critical: 1, high: 0.75, medium: 0.5, low: 0.25 };
 
 function SimBody() {
   const { data: suppliers } = useSuspenseQuery(suppliersQuery);
 
-  const countries = useMemo(() => {
-    const s = new Set<string>();
-    suppliers.forEach((r) => r.organizations?.country && s.add(r.organizations.country));
-    return Array.from(s).sort();
-  }, [suppliers]);
-
-  const [mode, setMode] = useState<Mode>("country");
-  const [country, setCountry] = useState<string>(countries[0] ?? "");
-  const [companyId, setCompanyId] = useState<string>(suppliers[0]?.organizations?.id ?? "");
-  const [kind, setKind] = useState<SignalKind>("geopolitical");
-  const [severity, setSeverity] = useState<Severity>("high");
-  const [ran, setRan] = useState(false);
-
-  const orgs = useMemo(
+  // What the user CONSUMES = their suppliers' products.
+  const consumed = useMemo(
     () =>
       suppliers
         .filter((s) => s.organizations)
         .map((s) => ({
-          id: s.organizations!.id,
-          name: s.organizations!.display_name,
-          country: s.organizations!.country,
-          industry: s.organizations!.industry,
+          id: s.id,
+          orgId: s.organizations!.id,
+          orgName: s.organizations!.display_name,
+          country: s.organizations!.country ?? "",
+          industry: s.organizations!.industry ?? "",
           product: s.product ?? "",
           category: s.category ?? "",
-          criticality: s.criticality,
+          criticality: (s.criticality ?? "medium") as string,
         })),
     [suppliers],
   );
 
+  const countries = useMemo(
+    () => Array.from(new Set(consumed.map((c) => c.country).filter(Boolean))).sort(),
+    [consumed],
+  );
+
+  const [selKinds, setSelKinds] = useState<SignalKind[]>(["geopolitical"]);
+  const [selCountries, setSelCountries] = useState<string[]>(
+    countries.length ? [countries[0]] : [],
+  );
+  const [selCompanyIds, setSelCompanyIds] = useState<string[]>([]);
+  const [severity, setSeverity] = useState<Severity>("high");
+  const [ran, setRan] = useState(false);
+
+  const toggle = <T,>(arr: T[], v: T) =>
+    arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+
   const result = useMemo(() => {
     if (!ran) return null;
-    let impacted: typeof orgs = [];
-    let scenarioCountry = "";
-    if (mode === "country" && country) {
-      scenarioCountry = country;
-      impacted = orgs.filter((o) => o.country === country);
-    } else if (mode === "company" && companyId) {
-      const target = orgs.find((o) => o.id === companyId);
-      if (target) {
-        scenarioCountry = target.country;
-        impacted = [target];
-      }
-    }
-    const signals = generateSignals(
-      orgs.map((o) => ({ id: o.id, name: o.name, country: o.country })),
-      scenarioCountry ? { country: scenarioCountry, kind, severity } : null,
-    ).filter((s) => s.id.startsWith("sim-") || s.country === scenarioCountry);
+    const targetCountries = new Set(selCountries);
+    const targetCompanyIds = new Set(selCompanyIds);
+    const impacted = consumed.filter(
+      (c) => targetCountries.has(c.country) || targetCompanyIds.has(c.orgId),
+    );
 
-    return { impacted, scenarioCountry, signals };
-  }, [ran, mode, country, companyId, kind, severity, orgs]);
+    // Composite simulated risk score 0-100
+    const total = consumed.length || 1;
+    const sevW = SEV_WEIGHT[severity];
+    const kindMult = 0.6 + Math.min(selKinds.length, 5) * 0.12;
+    const weighted = impacted.reduce(
+      (acc, i) => acc + (CRIT_WEIGHT[i.criticality] ?? 0.5),
+      0,
+    );
+    const raw = Math.round((weighted / total) * 100 * sevW * kindMult);
+    const score = Math.min(100, raw);
+
+    const signals = generateSignals(
+      consumed.map((o) => ({ id: o.orgId, name: o.orgName, country: o.country })),
+      selCountries[0]
+        ? { country: selCountries[0], kind: selKinds[0] ?? "geopolitical", severity }
+        : null,
+    ).filter((s) => s.id.startsWith("sim-") || targetCountries.has(s.country));
+
+    return { impacted, signals, score };
+  }, [ran, selCountries, selCompanyIds, selKinds, severity, consumed]);
+
+  const scoreTone = (n: number) =>
+    n >= 60 ? "text-destructive" : n >= 30 ? "text-amber-600" : "text-emerald-700";
 
   return (
     <div className="mx-auto max-w-[1240px] px-6 py-10">
@@ -123,54 +138,56 @@ function SimBody() {
         What-if. Nothing here is saved.
       </h1>
       <p className="mt-2 max-w-2xl text-[13.5px] text-muted-foreground">
-        Model a disruption against a country or a specific supplier. Results are
-        computed on-the-fly — your live risk history, alerts and supplier
+        Model a disruption against the products you consume from your suppliers.
+        Everything runs ephemerally — your live risk history, alerts and supplier
         records are never touched.
       </p>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        {/* LEFT: current suppliers */}
+        {/* LEFT: what the user consumes */}
         <div className="rounded-md border border-border bg-card">
           <div className="flex items-baseline justify-between border-b border-border px-5 py-3">
-            <div className="mono-label">Your current suppliers</div>
-            <span className="mono-label">{suppliers.length}</span>
+            <div className="mono-label">What you consume</div>
+            <span className="mono-label">{consumed.length} inbound</span>
           </div>
-          {suppliers.length === 0 ? (
+          {consumed.length === 0 ? (
             <p className="p-5 text-[13px] text-muted-foreground">
-              You haven't added suppliers yet. Add some in the Suppliers tab to
-              run scenarios against them.
+              You aren't buying anything yet. Add suppliers in the Suppliers tab to
+              run scenarios against your inbound products.
             </p>
           ) : (
             <ul className="max-h-[560px] divide-y divide-border overflow-auto">
-              {suppliers.map((s) => {
+              {consumed.map((c) => {
                 const hit =
                   result &&
-                  ((mode === "country" && s.organizations?.country === result.scenarioCountry) ||
-                    (mode === "company" && s.organizations?.id === companyId));
+                  (selCountries.includes(c.country) || selCompanyIds.includes(c.orgId));
                 return (
                   <li
-                    key={s.id}
+                    key={c.id}
                     className={`px-5 py-3 text-[13px] ${
-                      hit ? "bg-accent" : ""
+                      hit
+                        ? "border-l-4 border-l-destructive bg-destructive/10"
+                        : ""
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">
-                          {s.organizations?.display_name ?? "—"}
+                        <div className="truncate text-[13.5px] font-medium">
+                          {c.product || c.category || "Unspecified product"}
                         </div>
                         <div className="mono-label mt-0.5">
-                          {[s.organizations?.country, s.category || s.organizations?.industry]
-                            .filter(Boolean)
-                            .join(" · ") || "—"}
+                          from {c.orgName}
+                          {c.country ? ` · ${c.country}` : ""}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        {s.product && (
-                          <div className="text-[12px] text-foreground">{s.product}</div>
-                        )}
+                        <div className="rounded-sm border border-border px-1.5 py-0.5 text-[10.5px] capitalize text-muted-foreground">
+                          {c.criticality}
+                        </div>
                         {hit && (
-                          <div className="mono-label !text-primary mt-0.5">Impacted</div>
+                          <div className="mono-label !text-destructive mt-1">
+                            Impacted
+                          </div>
                         )}
                       </div>
                     </div>
@@ -184,83 +201,69 @@ function SimBody() {
         {/* RIGHT: scenario builder + results */}
         <div className="space-y-6">
           <div className="rounded-md border border-border bg-card p-5">
-            <div className="mono-label">Scenario</div>
-            <div className="mt-4 grid gap-4">
-              <Field label="Disruption type">
-                <select
-                  value={kind}
-                  onChange={(e) => setKind(e.target.value as SignalKind)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] capitalize"
-                >
-                  {KINDS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+            <div className="mono-label">Scenario builder</div>
 
-              <Field label="Target">
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setMode("country")}
-                    className={`flex-1 rounded-md border px-2 py-1.5 text-[12px] font-medium ${
-                      mode === "country"
-                        ? "border-primary bg-accent text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Location
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode("company")}
-                    className={`flex-1 rounded-md border px-2 py-1.5 text-[12px] font-medium ${
-                      mode === "company"
-                        ? "border-primary bg-accent text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Company
-                  </button>
+            <div className="mt-4 space-y-4">
+              <Field label="Disruption types (one or more)">
+                <div className="flex flex-wrap gap-1.5">
+                  {KINDS.map((k) => (
+                    <Chip
+                      key={k}
+                      active={selKinds.includes(k)}
+                      onClick={() => setSelKinds((s) => toggle(s, k))}
+                    >
+                      {k}
+                    </Chip>
+                  ))}
                 </div>
               </Field>
 
-              {mode === "country" ? (
-                <Field label="Country / region">
-                  <select
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px]"
-                  >
-                    {countries.length === 0 && (
-                      <option value="">No supplier countries yet</option>
-                    )}
+              <Field label="Affected countries (multi-select)">
+                {countries.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground">
+                    No supplier countries in your graph yet.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
                     {countries.map((c) => (
-                      <option key={c} value={c}>
+                      <Chip
+                        key={c}
+                        active={selCountries.includes(c)}
+                        onClick={() => setSelCountries((s) => toggle(s, c))}
+                      >
                         {c}
-                      </option>
+                      </Chip>
                     ))}
-                  </select>
-                </Field>
-              ) : (
-                <Field label="Supplier">
-                  <select
-                    value={companyId}
-                    onChange={(e) => setCompanyId(e.target.value)}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px]"
-                  >
-                    {orgs.length === 0 && <option value="">No suppliers yet</option>}
-                    {orgs.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                        {o.country ? ` — ${o.country}` : ""}
-                      </option>
+                  </div>
+                )}
+              </Field>
+
+              <Field label="Specific companies (optional)">
+                {consumed.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground">No suppliers yet.</p>
+                ) : (
+                  <div className="max-h-40 overflow-auto rounded-md border border-border p-2">
+                    {consumed.map((c) => (
+                      <label
+                        key={c.orgId}
+                        className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[12.5px] hover:bg-surface"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selCompanyIds.includes(c.orgId)}
+                          onChange={() =>
+                            setSelCompanyIds((s) => toggle(s, c.orgId))
+                          }
+                        />
+                        <span className="truncate">
+                          {c.orgName}
+                          {c.country ? ` — ${c.country}` : ""}
+                        </span>
+                      </label>
                     ))}
-                  </select>
-                </Field>
-              )}
+                  </div>
+                )}
+              </Field>
 
               <Field label="Severity">
                 <div className="flex gap-1.5">
@@ -285,8 +288,8 @@ function SimBody() {
                 <button
                   type="button"
                   disabled={
-                    (mode === "country" && !country) ||
-                    (mode === "company" && !companyId)
+                    selKinds.length === 0 ||
+                    (selCountries.length === 0 && selCompanyIds.length === 0)
                   }
                   onClick={() => setRan(true)}
                   className="flex-1 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
@@ -311,13 +314,24 @@ function SimBody() {
 
           {result && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border border-border bg-card p-4">
+                  <div className="mono-label">Simulated risk</div>
+                  <div
+                    className={`mt-1 font-display text-[26px] font-medium ${scoreTone(
+                      result.score,
+                    )}`}
+                  >
+                    {result.score}
+                    <span className="text-[13px] text-muted-foreground">/100</span>
+                  </div>
+                </div>
                 <Stat
-                  k="Impacted suppliers"
+                  k="Impacted inbound"
                   v={result.impacted.length.toString()}
                   emphasis={result.impacted.length > 0}
                 />
-                <Stat k="Projected signals" v={result.signals.length.toString()} />
+                <Stat k="Signals" v={result.signals.length.toString()} />
               </div>
 
               <Section title="Projected signals">
@@ -325,7 +339,7 @@ function SimBody() {
                   <Empty msg="No signals for this scenario." />
                 ) : (
                   <ul className="divide-y divide-border">
-                    {result.signals.slice(0, 5).map((s) => (
+                    {result.signals.slice(0, 6).map((s) => (
                       <li key={s.id} className="py-3">
                         <div className="flex items-center gap-2">
                           <span
@@ -347,41 +361,52 @@ function SimBody() {
 
               {result.impacted.length === 0 ? (
                 <div className="rounded-md border border-dashed border-border p-5 text-[13px] text-muted-foreground">
-                  None of your current suppliers are exposed to this scenario.
+                  None of your inbound products are exposed to this scenario.
                 </div>
               ) : (
                 <div className="space-y-4">
                   {result.impacted.map((o) => (
-                    <div
-                      key={o.id}
-                      className="rounded-md border border-border bg-card p-5"
-                    >
-                      <div className="flex items-baseline justify-between gap-3">
-                        <div>
-                          <div className="text-[14px] font-medium">{o.name}</div>
-                          <div className="mono-label mt-0.5">
-                            {[o.country, o.industry].filter(Boolean).join(" · ")}
+                    <div key={o.id} className="space-y-3">
+                      {/* Impacted item — red box */}
+                      <div className="rounded-md border-2 border-destructive/40 bg-destructive/10 p-4">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <div>
+                            <div className="mono-label !text-destructive">
+                              Impacted inbound
+                            </div>
+                            <div className="mt-1 text-[14.5px] font-medium">
+                              {o.product || o.category || "Unspecified product"}
+                            </div>
+                            <div className="mono-label mt-0.5">
+                              from {o.orgName}
+                              {o.country ? ` · ${o.country}` : ""}
+                            </div>
+                          </div>
+                          <div className="rounded-sm border border-destructive/40 bg-background px-1.5 py-0.5 text-[11px] capitalize text-destructive">
+                            {o.criticality}
                           </div>
                         </div>
-                        {o.product && (
-                          <div className="rounded-sm border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                            {o.product}
-                          </div>
-                        )}
                       </div>
-                      <div className="mt-4">
-                        <RecommendationsPanel
-                          title={`Alternatives for ${o.product || o.category || "this supply"}`}
-                          subtitle={`Cross-operator matches${
-                            o.country ? `, avoiding ${o.country}` : ""
-                          }.`}
-                          industry={o.industry}
-                          category={o.product || o.category}
-                          avoidCountry={o.country}
-                          excludeOrgId={o.id}
-                          limit={5}
-                          compact
-                        />
+
+                      {/* Recommendations — green box */}
+                      <div className="rounded-md border-2 border-emerald-500/40 bg-emerald-500/10 p-4">
+                        <div className="mono-label !text-emerald-700">
+                          Recommended alternatives
+                        </div>
+                        <div className="mt-2">
+                          <RecommendationsPanel
+                            title=""
+                            subtitle={`Cross-operator matches${
+                              o.country ? `, avoiding ${o.country}` : ""
+                            }.`}
+                            industry={o.industry}
+                            category={o.product || o.category}
+                            avoidCountry={o.country}
+                            excludeOrgId={o.orgId}
+                            limit={5}
+                            compact
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -403,11 +428,34 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-2.5 py-1 text-[11.5px] font-medium capitalize ${
+        active
+          ? "border-primary bg-accent text-primary"
+          : "border-border text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 function Stat({ k, v, emphasis }: { k: string; v: string; emphasis?: boolean }) {
   return (
     <div
       className={`rounded-md border p-4 ${
-        emphasis ? "border-primary/40 bg-accent" : "border-border bg-card"
+        emphasis ? "border-destructive/40 bg-destructive/10" : "border-border bg-card"
       }`}
     >
       <div className="mono-label">{k}</div>
