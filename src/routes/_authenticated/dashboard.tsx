@@ -216,11 +216,9 @@ function UserDashboard({
   /* Selling (my SKUs) — inventory represents products the user supplies. */
   const selling = useMemo(() => {
     const total = inventory.length;
-    const low = inventory.filter(
-      (i) => i.current_stock <= (i.reorder_level ?? 0),
-    ).length;
-    const units = inventory.reduce((n, i) => n + (i.current_stock ?? 0), 0);
-    const safety = inventory.reduce((n, i) => n + (i.safety_stock ?? 0), 0);
+    const low = inventory.filter((i) => !i.warehouse_id || (i.monthly_production ?? 0) === 0).length;
+    const units = inventory.reduce((n, i) => n + (i.monthly_production ?? 0), 0);
+    const safety = inventory.reduce((n, i) => n + (i.warehouse_capacity ?? 0), 0);
     return { total, low, units, safety, healthy: total - low };
   }, [inventory]);
 
