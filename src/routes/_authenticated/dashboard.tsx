@@ -194,6 +194,18 @@ function MainGrid() {
           </div>
         </div>
 
+        {rec && (
+          <RecommendationsPanel
+            title="Recommended alternatives"
+            subtitle={`Response to top signal: ${rec.headline}`}
+            industry={rec.industry}
+            category={rec.category}
+            avoidCountry={rec.country}
+            limit={4}
+          />
+        )}
+
+
         <div className="rounded-md border border-border bg-card p-6">
           <div className="mono-label">Recent additions</div>
           {suppliers.length === 0 ? (
