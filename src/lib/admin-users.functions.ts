@@ -233,6 +233,11 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     await assertAdmin(supabase, actorId);
     if (data.userId === actorId) throw new Error("You cannot delete yourself.");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prev } = await supabaseAdmin
+      .from("profiles")
+      .select("work_email, full_name")
+      .eq("id", data.userId)
+      .maybeSingle();
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
     if (error) throw error;
     await supabaseAdmin.from("audit_logs").insert({
@@ -240,7 +245,11 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
       action: "user.delete",
       target_type: "profile",
       target_id: data.userId,
-      meta: {},
+      meta: {
+        email: (prev as any)?.work_email ?? null,
+        full_name: (prev as any)?.full_name ?? null,
+        by: "admin",
+      },
     });
     return { ok: true };
   });
