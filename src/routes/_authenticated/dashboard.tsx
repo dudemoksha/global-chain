@@ -1272,6 +1272,38 @@ function ModalField({
 const inputCls =
   "h-9 w-full rounded-md border border-border bg-background px-3 text-[13px] outline-none focus:border-primary";
 
+function PasswordInput({
+  value,
+  onChange,
+  required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  const [reveal, setReveal] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={reveal ? "text" : "password"}
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${inputCls} pr-14`}
+      />
+      <button
+        type="button"
+        onClick={() => setReveal((v) => !v)}
+        className="absolute inset-y-0 right-2 my-auto h-7 rounded px-2 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+        tabIndex={-1}
+        aria-label={reveal ? "Hide password" : "Show password"}
+      >
+        {reveal ? "Hide" : "Show"}
+      </button>
+    </div>
+  );
+}
+
 function UserFormModal({
   mode,
   user,
@@ -1366,12 +1398,10 @@ function UserFormModal({
         </ModalField>
         {mode === "create" && (
           <ModalField label="Password">
-            <input
-              type="password"
+            <PasswordInput
               required
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className={inputCls}
+              onChange={(v) => setForm({ ...form, password: v })}
             />
             <p
               className={`mt-1 text-[11px] ${
@@ -1516,12 +1546,10 @@ function PasswordModal({
     <ModalShell title={`Reset password · ${user.work_email}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
         <ModalField label="New password">
-          <input
-            type="password"
+          <PasswordInput
             required
             value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            className={inputCls}
+            onChange={(v) => setPw(v)}
           />
           <p
             className={`mt-1 text-[11px] ${
