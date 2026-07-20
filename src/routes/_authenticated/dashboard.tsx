@@ -637,12 +637,13 @@ function UserNetwork({
 
 /* ═══════════════════════════ ADMIN DASHBOARD ═══════════════════════════ */
 
-type AdminTab = "overview" | "approvals" | "companies" | "activity";
+type AdminTab = "overview" | "approvals" | "users" | "activity";
 
 function AdminDashboard() {
   const [tab, setTab] = useState<AdminTab>("overview");
   const { data: stats } = useSuspenseQuery(adminStatsQuery);
   const { data: profiles } = useSuspenseQuery(adminProfilesQuery);
+  const { data: users } = useSuspenseQuery(adminUsersQuery);
 
   const pending = profiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
   const approved = profiles.filter((p) => p.is_approved).length;
@@ -651,7 +652,7 @@ function AdminDashboard() {
   const ADMIN_TABS: { id: AdminTab; label: string; badge?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "approvals", label: "Approvals", badge: pending || undefined },
-    { id: "companies", label: "Companies" },
+    { id: "users", label: "Users" },
     { id: "activity", label: "Activity" },
   ];
 
@@ -666,7 +667,7 @@ function AdminDashboard() {
                 Platform control
               </h1>
               <p className="mt-2 text-[13.5px] text-muted-foreground">
-                Vet access, manage companies and audit every privileged action
+                Vet access, manage users and audit every privileged action
                 on Global-Chain.
               </p>
             </div>
@@ -702,12 +703,13 @@ function AdminDashboard() {
           />
         )}
         {tab === "approvals" && <AdminApprovals profiles={profiles} />}
-        {tab === "companies" && <AdminCompanies profiles={profiles} />}
+        {tab === "users" && <AdminUsers users={users} />}
         {tab === "activity" && <AdminActivity profiles={profiles} />}
       </div>
     </>
   );
 }
+
 
 /* ── Admin tab: Overview ── */
 
