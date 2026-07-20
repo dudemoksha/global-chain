@@ -38,6 +38,7 @@ export const logAuthEvent = createServerFn({ method: "POST" })
         timezone: data.timezone,
         screen: data.screen,
         device: detectDevice(data.userAgent),
+        by: "self",
       },
     });
     return { ok: true };
