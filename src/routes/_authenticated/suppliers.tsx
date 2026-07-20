@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { Mark } from "@/components/site/mark";
+import { AlertBell } from "@/components/site/alert-bell";
 import { supabase } from "@/integrations/supabase/client";
 import {
   addSupplier,
@@ -14,6 +15,7 @@ import {
   removeSupplier,
 } from "@/lib/suppliers.functions";
 import { getMyProfile } from "@/lib/profile.functions";
+import { listMyWatches, toggleWatch } from "@/lib/alerts.functions";
 
 const meQuery = queryOptions({
   queryKey: ["me"],
@@ -26,6 +28,10 @@ const listQuery = queryOptions({
 const graphQuery = queryOptions({
   queryKey: ["suppliers", "graph"],
   queryFn: () => getMySupplyGraph(),
+});
+const watchesQuery = queryOptions({
+  queryKey: ["watches", "mine"],
+  queryFn: () => listMyWatches(),
 });
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
@@ -40,6 +46,7 @@ export const Route = createFileRoute("/_authenticated/suppliers")({
       context.queryClient.ensureQueryData(meQuery),
       context.queryClient.ensureQueryData(listQuery),
       context.queryClient.ensureQueryData(graphQuery),
+      context.queryClient.ensureQueryData(watchesQuery),
     ]);
   },
   component: SuppliersPage,
@@ -51,6 +58,8 @@ function SuppliersPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: rows } = useSuspenseQuery(listQuery);
   const { data: graph } = useSuspenseQuery(graphQuery);
+  const { data: watches } = useSuspenseQuery(watchesQuery);
+  const watchedSet = new Set(watches);
   const qc = useQueryClient();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -68,11 +77,17 @@ function SuppliersPage() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["suppliers", "mine"] }),
       qc.invalidateQueries({ queryKey: ["suppliers", "graph"] }),
+      qc.invalidateQueries({ queryKey: ["watches", "mine"] }),
     ]);
   }
 
   async function onRemove(id: string) {
     await removeSupplier({ data: { id } });
+    await refresh();
+  }
+
+  async function onToggleWatch(supplierId: string, next: boolean) {
+    await toggleWatch({ data: { supplier_id: supplierId, watch: next } });
     await refresh();
   }
 
@@ -101,38 +116,28 @@ function SuppliersPage() {
             <Mark />
           </Link>
           <nav className="hidden items-center gap-6 md:flex">
-            <Link
-              to="/dashboard"
-              className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{ className: "text-primary" }}
-            >
-              Dashboard
-            </Link>
-            <Link
-              to="/suppliers"
-              className="text-[13px] font-medium"
-              activeProps={{ className: "text-primary" }}
-            >
-              Suppliers
-            </Link>
+            <Link to="/dashboard" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Dashboard</Link>
+            <Link to="/suppliers" className="text-[13px] font-medium text-primary">Suppliers</Link>
+            <Link to="/globe" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Globe</Link>
+            <Link to="/signals" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Signals</Link>
+            <Link to="/alerts" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Alerts</Link>
             {me.isAdmin && (
-              <Link
-                to="/admin/requests"
-                className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-              >
-                Admin
-              </Link>
+              <Link to="/admin/requests" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Trust desk</Link>
             )}
           </nav>
-          <button
-            type="button"
-            onClick={signOut}
-            className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-3">
+            <AlertBell />
+            <button
+              type="button"
+              onClick={signOut}
+              className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
+
 
       <div className="mx-auto max-w-[1240px] px-6 py-14">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -181,13 +186,14 @@ function SuppliersPage() {
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 {[
+                  "",
                   "Organisation",
                   "Category",
                   "Criticality",
                   "Spend / Lead time",
                   "",
-                ].map((h) => (
-                  <th key={h} className="mono-label px-4 py-2.5 text-left">
+                ].map((h, i) => (
+                  <th key={i} className="mono-label px-4 py-2.5 text-left">
                     {h}
                   </th>
                 ))}
@@ -197,7 +203,7 @@ function SuppliersPage() {
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-16 text-center text-muted-foreground"
                   >
                     No suppliers yet — add your first tier-1 partner to begin
@@ -210,6 +216,12 @@ function SuppliersPage() {
                   key={r.id}
                   className="border-b border-border last:border-0"
                 >
+                  <td className="px-4 py-4 align-top">
+                    <WatchStar
+                      on={watchedSet.has(r.id)}
+                      onClick={() => onToggleWatch(r.id, !watchedSet.has(r.id))}
+                    />
+                  </td>
                   <td className="px-4 py-4 align-top">
                     <div className="font-medium">
                       {r.organizations?.display_name ?? "—"}
@@ -346,6 +358,27 @@ function CriticalityPill({ c }: { c: Criticality }) {
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>
+  );
+}
+
+function WatchStar({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={on ? "Unwatch" : "Watch"}
+      title={on ? "Watching — click to unwatch" : "Watch to prioritise alerts"}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors ${
+        on
+          ? "border-primary/40 text-primary"
+          : "border-border text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      <svg width="13" height="13" viewBox="0 0 16 16" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
+        <path d="M8 1.8 10 6l4.4.4-3.4 3 1 4.4L8 11.6 3.9 13.8l1-4.4-3.4-3L6 6Z" />
+      </svg>
+    </button>
   );
 }
 

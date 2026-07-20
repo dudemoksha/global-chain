@@ -1,5 +1,6 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { Mark } from "@/components/site/mark";
+import { AlertBell } from "@/components/site/alert-bell";
 import { supabase } from "@/integrations/supabase/client";
 
 type NavItem = { to: string; label: string; adminOnly?: boolean };
@@ -10,6 +11,7 @@ const NAV: NavItem[] = [
   { to: "/globe", label: "Globe" },
   { to: "/signals", label: "Signals" },
   { to: "/simulation", label: "Simulation" },
+  { to: "/alerts", label: "Alerts" },
   { to: "/admin/requests", label: "Trust desk", adminOnly: true },
 ];
 
@@ -51,6 +53,7 @@ export function AppShell({
             ))}
           </nav>
           <div className="flex items-center gap-3">
+            <AlertBell />
             <span className="mono-label hidden lg:inline">{email}</span>
             <button
               type="button"

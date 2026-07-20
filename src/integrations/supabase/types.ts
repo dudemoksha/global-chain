@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      alerts: {
+        Row: {
+          country: string
+          created_at: string
+          detail: string
+          headline: string
+          id: string
+          kind: string
+          read_at: string | null
+          severity: string
+          signal_key: string
+          supplier_name: string | null
+          supplier_org_id: string | null
+          user_id: string
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          detail: string
+          headline: string
+          id?: string
+          kind: string
+          read_at?: string | null
+          severity: string
+          signal_key: string
+          supplier_name?: string | null
+          supplier_org_id?: string | null
+          user_id: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          detail?: string
+          headline?: string
+          id?: string
+          kind?: string
+          read_at?: string | null
+          severity?: string
+          signal_key?: string
+          supplier_name?: string | null
+          supplier_org_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_supplier_org_id_fkey"
+            columns: ["supplier_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           country: string
@@ -97,6 +150,35 @@ export type Database = {
           work_email?: string
         }
         Relationships: []
+      }
+      supplier_watches: {
+        Row: {
+          created_at: string
+          id: string
+          supplier_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          supplier_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          supplier_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_watches_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       suppliers: {
         Row: {
