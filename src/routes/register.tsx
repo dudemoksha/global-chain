@@ -58,6 +58,11 @@ function RegisterPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const pwError = useMemo(
+    () => (form.password ? validatePassword(form.password) : null),
+    [form.password],
+  );
+
   const canNext = useMemo(() => {
     if (step === 0)
       return form.legalName && form.hqCountry && form.industry && form.tierRole;
@@ -66,10 +71,11 @@ function RegisterPage() {
         form.fullName &&
         form.workEmail &&
         form.jobTitle &&
-        form.password.length >= 8
+        !validatePassword(form.password)
       );
     return true;
   }, [step, form]);
+
 
   const set =
     <K extends keyof FormState>(k: K) =>
