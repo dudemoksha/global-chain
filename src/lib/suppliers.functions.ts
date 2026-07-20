@@ -12,13 +12,33 @@ export const listMySuppliers = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("suppliers")
       .select(
-        `id, category, criticality, annual_spend_bucket, lead_time_days, notes, created_at,
+        `id, category, criticality, annual_spend_bucket, lead_time_days, notes, product, is_stopped, stopped_at, created_at,
          organizations:supplier_org_id ( id, display_name, country, industry )`,
       )
       .eq("owner_id", userId)
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data ?? [];
+  });
+
+/** Mark a supplier link as stopped/active. Stopped links spike the buyer's risk. */
+export const setSupplierStopped = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), stopped: z.boolean() }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase
+      .from("suppliers")
+      .update({
+        is_stopped: data.stopped,
+        stopped_at: data.stopped ? new Date().toISOString() : null,
+      })
+      .eq("id", data.id)
+      .eq("owner_id", userId);
+    if (error) throw error;
+    return { ok: true };
   });
 
 const addInput = z.object({

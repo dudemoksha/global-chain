@@ -9,12 +9,15 @@ import { AppShell } from "@/components/site/app-shell";
 import {
   listMySuppliers,
   removeSupplier,
+  setSupplierStopped,
 } from "@/lib/suppliers.functions";
 import {
+  listOrgProducts,
   searchOrganizations,
   sendTradeRequest,
 } from "@/lib/trade-requests.functions";
 import { getMyProfile } from "@/lib/profile.functions";
+import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const listQuery = queryOptions({
@@ -156,7 +159,7 @@ function SuppliersPage() {
           <table className="w-full text-left text-[13.5px]">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                {["Supplier", "Category", "Criticality", "Spend / Lead time", ""].map((h, i) => (
+                {["Supplier", "Product", "Category", "Status", "Criticality", ""].map((h, i) => (
                   <th key={i} className="mono-label px-4 py-2.5 text-left">{h}</th>
                 ))}
               </tr>
@@ -164,43 +167,84 @@ function SuppliersPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-16 text-center text-muted-foreground">
                     {rows.length === 0
                       ? "No suppliers yet — request one, or check pending requests under Requests."
                       : "No suppliers match your filters."}
                   </td>
                 </tr>
               )}
-              {filtered.map((r) => (
-                <tr key={r.id} className="border-b border-border last:border-0">
+              {filtered.map((r: any) => (
+                <tr key={r.id} className={`border-b border-border last:border-0 ${r.is_stopped ? "bg-destructive/5" : ""}`}>
                   <td className="px-4 py-4 align-top">
                     <div className="font-medium">{r.organizations?.display_name ?? "—"}</div>
                     <div className="mono-label mt-1">
                       {[r.organizations?.country, r.organizations?.industry].filter(Boolean).join(" · ") || "—"}
                     </div>
                   </td>
+                  <td className="px-4 py-4 align-top">{r.product || "—"}</td>
                   <td className="px-4 py-4 align-top">{r.category || "—"}</td>
-                  <td className="px-4 py-4 align-top"><CriticalityPill c={r.criticality as Criticality} /></td>
                   <td className="px-4 py-4 align-top">
-                    <div>{r.annual_spend_bucket || "—"}</div>
-                    <div className="text-[12px] text-muted-foreground">
-                      {r.lead_time_days ? `${r.lead_time_days} day lead` : ""}
-                    </div>
+                    {r.is_stopped ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/40 px-2 py-0.5 text-[11px] font-medium text-destructive">
+                        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                        Stopped
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        Active
+                      </span>
+                    )}
                   </td>
+                  <td className="px-4 py-4 align-top"><CriticalityPill c={r.criticality as Criticality} /></td>
                   <td className="px-4 py-4 text-right align-top">
-                    <button
-                      type="button"
-                      onClick={() => onRemove(r.id)}
-                      className="rounded-md border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground hover:border-destructive hover:text-destructive"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await setSupplierStopped({ data: { id: r.id, stopped: !r.is_stopped } });
+                          await refresh();
+                        }}
+                        className={`rounded-md border px-3 py-1.5 text-[12.5px] font-medium ${
+                          r.is_stopped
+                            ? "border-primary/40 text-primary hover:bg-accent"
+                            : "border-border text-muted-foreground hover:border-warn hover:text-warn"
+                        }`}
+                      >
+                        {r.is_stopped ? "Mark active" : "Mark stopped"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemove(r.id)}
+                        className="rounded-md border border-border px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground hover:border-destructive hover:text-destructive"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {rows.some((r: any) => r.is_stopped) && (
+          <div className="mt-8 space-y-4">
+            <div className="mono-label">§ Recommended alternatives for stopped supplies</div>
+            {rows.filter((r: any) => r.is_stopped).slice(0, 3).map((r: any) => (
+              <RecommendationsPanel
+                key={r.id}
+                title={`Alternatives for ${r.product || r.category || "affected product"}`}
+                subtitle={`${r.organizations?.display_name ?? "Supplier"} stopped supplying${r.product ? ` "${r.product}"` : ""}`}
+                industry={r.organizations?.industry ?? ""}
+                category={r.category ?? ""}
+                avoidCountry={r.organizations?.country ?? ""}
+                limit={4}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {open && (
@@ -346,11 +390,28 @@ function RequestSupplierDialog({
   const [quantity, setQuantity] = useState("");
   const [category, setCategory] = useState("");
   const [message, setMessage] = useState("");
+  const [products, setProducts] = useState<Array<{ sku: string; name: string; unit: string }>>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  useEffect(() => {
+    setProduct("");
+    setProducts([]);
+    if (!orgId) return;
+    setLoadingProducts(true);
+    listOrgProducts({ data: { org_id: orgId } })
+      .then((res) => setProducts(res))
+      .catch(() => setProducts([]))
+      .finally(() => setLoadingProducts(false));
+  }, [orgId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!orgId) {
       setErr("Pick an organisation from the dropdown first.");
+      return;
+    }
+    if (!product.trim()) {
+      setErr("Pick a product from the supplier's catalogue.");
       return;
     }
     setBusy(true);
@@ -400,14 +461,32 @@ function RequestSupplierDialog({
               </p>
             </div>
             <label className="block sm:col-span-2">
-              <div className="mono-label mb-1.5">Product / SKU you need</div>
-              <input
+              <div className="mono-label mb-1.5">Product (from supplier's catalogue)</div>
+              <select
                 value={product}
                 onChange={(e) => setProduct(e.target.value)}
-                placeholder="e.g. 4-layer PCB, food-grade steel drum"
                 required
-                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
-              />
+                disabled={!orgId || loadingProducts || products.length === 0}
+                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground disabled:opacity-60"
+              >
+                <option value="">
+                  {!orgId
+                    ? "Pick a supplier first…"
+                    : loadingProducts
+                      ? "Loading catalogue…"
+                      : products.length === 0
+                        ? "This supplier hasn't listed any SKUs yet"
+                        : "Select a product…"}
+                </option>
+                {products.map((p) => (
+                  <option key={p.sku} value={p.name}>
+                    {p.name} · {p.sku} ({p.unit})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">
+                Products are pulled live from what this supplier actually sells on Global-Chain.
+              </p>
             </label>
             <label className="block">
               <div className="mono-label mb-1.5">Quantity</div>

@@ -204,6 +204,10 @@ function UserDashboard({
     const critical = suppliers.filter((s) => s.criticality === "critical").length;
     raw += critical * 3;
 
+    // Stopped-supply shocks: a halted supplier is an active disruption.
+    const stopped = suppliers.filter((s: any) => s.is_stopped).length;
+    raw += stopped * 25;
+
     const score = Math.max(0, Math.min(100, Math.round(100 - raw)));
     const band =
       score >= 80 ? "Stable"
