@@ -59,13 +59,14 @@ function AnalyticsPage() {
   }, [suppliers, graph]);
 
   const stockHealth = useMemo(() => {
-    const critical = inventory.filter((r) => r.current_stock < r.safety_stock).length;
-    const reorder = inventory.filter((r) => r.current_stock >= r.safety_stock && r.current_stock <= r.reorder_level).length;
-    const ok = inventory.length - critical - reorder;
+    const total = inventory.length;
+    const noWarehouse = inventory.filter((r) => !r.warehouse_id).length;
+    const zeroProduction = inventory.filter((r) => (r.monthly_production ?? 0) === 0).length;
+    const ok = Math.max(0, total - noWarehouse - zeroProduction);
     return [
-      { name: "OK", value: Math.max(0, ok) },
-      { name: "Reorder", value: reorder },
-      { name: "Critical", value: critical },
+      { name: "OK", value: ok },
+      { name: "No warehouse", value: noWarehouse },
+      { name: "No production", value: zeroProduction },
     ];
   }, [inventory]);
 
