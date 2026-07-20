@@ -1,23 +1,22 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   queryOptions,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
-import { supabase } from "@/integrations/supabase/client";
 import {
-  addSupplier,
   listMySuppliers,
   removeSupplier,
 } from "@/lib/suppliers.functions";
+import {
+  searchOrganizations,
+  sendTradeRequest,
+} from "@/lib/trade-requests.functions";
 import { getMyProfile } from "@/lib/profile.functions";
 
-const meQuery = queryOptions({
-  queryKey: ["me"],
-  queryFn: () => getMyProfile(),
-});
+const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const listQuery = queryOptions({
   queryKey: ["suppliers", "mine"],
   queryFn: () => listMySuppliers(),
@@ -45,7 +44,6 @@ function SuppliersPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const { data: rows } = useSuspenseQuery(listQuery);
   const qc = useQueryClient();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [critFilter, setCritFilter] = useState<"all" | Criticality>("all");
@@ -88,10 +86,7 @@ function SuppliersPage() {
         <h1 className="mt-3 font-display text-[28px] font-medium">
           Suppliers unlock once the trust desk approves your organisation.
         </h1>
-        <Link
-          to="/dashboard"
-          className="mt-6 inline-flex text-[13px] font-medium text-primary"
-        >
+        <Link to="/dashboard" className="mt-6 inline-flex text-[13px] font-medium text-primary">
           Back to dashboard →
         </Link>
       </div>
@@ -109,9 +104,8 @@ function SuppliersPage() {
                 Suppliers you buy from
               </h1>
               <p className="mt-2 max-w-2xl text-[13.5px] text-muted-foreground">
-                Declare every organisation you consume products or services
-                from. This is the source of truth for your risk score and
-                for the recommendations we surface when something goes wrong.
+                Send a request to any organisation on Global-Chain. Once they
+                accept, they appear here — and you appear in their Customers list.
               </p>
             </div>
             <button
@@ -119,17 +113,13 @@ function SuppliersPage() {
               onClick={() => setOpen(true)}
               className="inline-flex items-center gap-2 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
             >
-              + Add supplier
+              + Request a supplier
             </button>
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard k="Suppliers" v={String(stats.total)} />
-            <StatCard
-              k="Critical deps"
-              v={String(stats.critical)}
-              emphasis={stats.critical > 0}
-            />
+            <StatCard k="Critical deps" v={String(stats.critical)} emphasis={stats.critical > 0} />
             <StatCard k="Countries" v={String(stats.countries)} />
             <StatCard k="Categories" v={String(stats.categories)} />
           </div>
@@ -166,57 +156,35 @@ function SuppliersPage() {
           <table className="w-full text-left text-[13.5px]">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                {[
-                  "Supplier",
-                  "Category",
-                  "Criticality",
-                  "Spend / Lead time",
-                  "",
-                ].map((h, i) => (
-                  <th key={i} className="mono-label px-4 py-2.5 text-left">
-                    {h}
-                  </th>
+                {["Supplier", "Category", "Criticality", "Spend / Lead time", ""].map((h, i) => (
+                  <th key={i} className="mono-label px-4 py-2.5 text-left">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-16 text-center text-muted-foreground"
-                  >
+                  <td colSpan={5} className="px-4 py-16 text-center text-muted-foreground">
                     {rows.length === 0
-                      ? "No suppliers yet — add your first partner, or import them from the Upload centre."
+                      ? "No suppliers yet — request one, or check pending requests under Requests."
                       : "No suppliers match your filters."}
                   </td>
                 </tr>
               )}
               {filtered.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-b border-border last:border-0"
-                >
+                <tr key={r.id} className="border-b border-border last:border-0">
                   <td className="px-4 py-4 align-top">
-                    <div className="font-medium">
-                      {r.organizations?.display_name ?? "—"}
-                    </div>
+                    <div className="font-medium">{r.organizations?.display_name ?? "—"}</div>
                     <div className="mono-label mt-1">
-                      {[r.organizations?.country, r.organizations?.industry]
-                        .filter(Boolean)
-                        .join(" · ") || "—"}
+                      {[r.organizations?.country, r.organizations?.industry].filter(Boolean).join(" · ") || "—"}
                     </div>
                   </td>
                   <td className="px-4 py-4 align-top">{r.category || "—"}</td>
-                  <td className="px-4 py-4 align-top">
-                    <CriticalityPill c={r.criticality as Criticality} />
-                  </td>
+                  <td className="px-4 py-4 align-top"><CriticalityPill c={r.criticality as Criticality} /></td>
                   <td className="px-4 py-4 align-top">
                     <div>{r.annual_spend_bucket || "—"}</div>
                     <div className="text-[12px] text-muted-foreground">
-                      {r.lead_time_days
-                        ? `${r.lead_time_days} day lead`
-                        : ""}
+                      {r.lead_time_days ? `${r.lead_time_days} day lead` : ""}
                     </div>
                   </td>
                   <td className="px-4 py-4 text-right align-top">
@@ -236,9 +204,9 @@ function SuppliersPage() {
       </div>
 
       {open && (
-        <AddSupplierDialog
+        <RequestSupplierDialog
           onClose={() => setOpen(false)}
-          onSaved={async () => {
+          onSent={async () => {
             setOpen(false);
             await refresh();
           }}
@@ -248,21 +216,9 @@ function SuppliersPage() {
   );
 }
 
-function StatCard({
-  k,
-  v,
-  emphasis,
-}: {
-  k: string;
-  v: string;
-  emphasis?: boolean;
-}) {
+function StatCard({ k, v, emphasis }: { k: string; v: string; emphasis?: boolean }) {
   return (
-    <div
-      className={`rounded-md border p-5 ${
-        emphasis ? "border-primary/40 bg-accent" : "border-border bg-card"
-      }`}
-    >
+    <div className={`rounded-md border p-5 ${emphasis ? "border-primary/40 bg-accent" : "border-border bg-card"}`}>
       <div className="mono-label">{k}</div>
       <div className="mt-2 font-display text-[28px] font-medium">{v}</div>
     </div>
@@ -274,70 +230,146 @@ function CriticalityPill({ c }: { c: Criticality }) {
     low: { label: "Low", dot: "bg-muted-foreground", border: "border-border" },
     medium: { label: "Medium", dot: "bg-primary", border: "border-border" },
     high: { label: "High", dot: "bg-warn", border: "border-border" },
-    critical: {
-      label: "Critical",
-      dot: "bg-destructive",
-      border: "border-destructive/40",
-    },
+    critical: { label: "Critical", dot: "bg-destructive", border: "border-destructive/40" },
   };
   const s = map[c];
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border ${s.border} px-2 py-0.5 text-[11px] font-medium`}
-    >
+    <span className={`inline-flex items-center gap-1.5 rounded-full border ${s.border} px-2 py-0.5 text-[11px] font-medium`}>
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>
   );
 }
 
-function AddSupplierDialog({
+type OrgHit = { id: string; display_name: string; country: string; industry: string };
+
+export function OrgAutocomplete({
+  onPick,
+  placeholder = "Start typing an organisation name…",
+}: {
+  onPick: (org: OrgHit) => void;
+  placeholder?: string;
+}) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<OrgHit[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [picked, setPicked] = useState<OrgHit | null>(null);
+
+  useEffect(() => {
+    if (picked && q === picked.display_name) return;
+    if (timer.current) clearTimeout(timer.current);
+    if (q.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    setLoading(true);
+    timer.current = setTimeout(async () => {
+      try {
+        const res = await searchOrganizations({ data: { q: q.trim() } });
+        setHits(res as OrgHit[]);
+        setOpen(true);
+      } finally {
+        setLoading(false);
+      }
+    }, 220);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [q, picked]);
+
+  return (
+    <div className="relative">
+      <input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setPicked(null);
+        }}
+        onFocus={() => hits.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
+      />
+      {open && (hits.length > 0 || loading) && (
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border border-border bg-card shadow-lg animate-rise">
+          {loading && <div className="px-3 py-2 text-[12px] text-muted-foreground">Searching…</div>}
+          {hits.map((h) => (
+            <button
+              key={h.id}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setPicked(h);
+                setQ(h.display_name);
+                setOpen(false);
+                onPick(h);
+              }}
+              className="block w-full border-b border-border px-3 py-2 text-left last:border-0 hover:bg-surface"
+            >
+              <div className="text-[13.5px] font-medium">{h.display_name}</div>
+              <div className="mono-label mt-0.5">
+                {[h.country, h.industry].filter(Boolean).join(" · ") || "—"}
+              </div>
+            </button>
+          ))}
+          {!loading && hits.length === 0 && q.trim().length >= 2 && (
+            <div className="px-3 py-3 text-[12.5px] text-muted-foreground">
+              No matches — that organisation isn't on Global-Chain yet.
+            </div>
+          )}
+        </div>
+      )}
+      {picked && (
+        <div className="mt-2 rounded-md border border-primary/30 bg-accent px-3 py-2 text-[12.5px]">
+          Selected: <span className="font-medium">{picked.display_name}</span>
+          <span className="text-muted-foreground"> — {[picked.country, picked.industry].filter(Boolean).join(" · ") || "no metadata"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestSupplierDialog({
   onClose,
-  onSaved,
+  onSent,
 }: {
   onClose: () => void;
-  onSaved: () => void | Promise<void>;
+  onSent: () => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    legal_name: "",
-    country: "",
-    industry: "",
-    category: "",
-    criticality: "medium" as Criticality,
-    annual_spend_bucket: "",
-    lead_time_days: "",
-    notes: "",
-  });
-
-  const set =
-    <K extends keyof typeof form>(k: K) =>
-    (v: (typeof form)[K]) =>
-      setForm((f) => ({ ...f, [k]: v }));
+  const [ok, setOk] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [product, setProduct] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [category, setCategory] = useState("");
+  const [message, setMessage] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!orgId) {
+      setErr("Pick an organisation from the dropdown first.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
-      await addSupplier({
+      await sendTradeRequest({
         data: {
-          legal_name: form.legal_name,
-          country: form.country,
-          industry: form.industry,
-          category: form.category,
-          criticality: form.criticality,
-          annual_spend_bucket: form.annual_spend_bucket,
-          lead_time_days: form.lead_time_days
-            ? Number(form.lead_time_days)
-            : null,
-          notes: form.notes,
+          to_org_id: orgId,
+          direction: "buy",
+          product,
+          quantity,
+          category,
+          message,
         },
       });
-      await onSaved();
+      setOk(true);
+      setTimeout(onSent, 900);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to add supplier");
+      setErr(e instanceof Error ? e.message : "Failed to send request");
       setBusy(false);
     }
   }
@@ -346,140 +378,89 @@ function AddSupplierDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/20 p-6 backdrop-blur-[1px]">
       <div className="w-full max-w-2xl rounded-md border border-border bg-background shadow-xl animate-rise">
         <header className="flex items-center justify-between border-b border-border px-6 py-3">
-          <span className="mono-label">§ New supplier</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[13px] text-muted-foreground hover:text-foreground"
-          >
+          <span className="mono-label">§ Request a supplier</span>
+          <button type="button" onClick={onClose} className="text-[13px] text-muted-foreground hover:text-foreground">
             Close ✕
           </button>
         </header>
-        <form onSubmit={submit} className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
-          <F
-            className="sm:col-span-2"
-            label="Supplier legal name"
-            value={form.legal_name}
-            onChange={set("legal_name")}
-            placeholder="Foxconn Technology Group"
-            required
-          />
-          <F
-            label="Country"
-            value={form.country}
-            onChange={set("country")}
-            placeholder="Taiwan"
-          />
-          <F
-            label="Industry"
-            value={form.industry}
-            onChange={set("industry")}
-            placeholder="Electronics manufacturing"
-          />
-          <F
-            label="Category / what they supply"
-            value={form.category}
-            onChange={set("category")}
-            placeholder="Semiconductor assembly"
-            className="sm:col-span-2"
-          />
-          <div>
-            <div className="mono-label mb-1.5">Criticality</div>
-            <div className="grid grid-cols-4 gap-1 rounded-md border border-border p-1">
-              {(["low", "medium", "high", "critical"] as const).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => set("criticality")(c)}
-                  className={`rounded-sm px-2 py-1.5 text-[12px] font-medium capitalize transition-colors ${
-                    form.criticality === c
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
+        {ok ? (
+          <div className="p-8 text-center">
+            <div className="mono-label !text-primary">§ Sent</div>
+            <p className="mt-3 text-[14px]">
+              Your request is on its way. It will appear in your Suppliers list once they accept.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <div className="mono-label mb-1.5">Supplier organisation</div>
+              <OrgAutocomplete onPick={(o) => setOrgId(o.id)} />
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                Only organisations that already have an approved Global-Chain account can receive requests.
+              </p>
             </div>
-          </div>
-          <F
-            label="Annual spend bucket"
-            value={form.annual_spend_bucket}
-            onChange={set("annual_spend_bucket")}
-            placeholder="$1M – $10M"
-          />
-          <F
-            label="Lead time (days)"
-            type="number"
-            value={form.lead_time_days}
-            onChange={set("lead_time_days")}
-            placeholder="45"
-          />
-          <div className="sm:col-span-2">
-            <div className="mono-label mb-1.5">Notes (optional)</div>
-            <textarea
-              rows={3}
-              value={form.notes}
-              onChange={(e) => set("notes")(e.target.value)}
-              placeholder="Contract terms, backup posture, anything worth knowing."
-              className="w-full resize-none rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
-            />
-          </div>
-          {err && (
-            <div className="sm:col-span-2 rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
-              {err}
+            <label className="block sm:col-span-2">
+              <div className="mono-label mb-1.5">Product / SKU you need</div>
+              <input
+                value={product}
+                onChange={(e) => setProduct(e.target.value)}
+                placeholder="e.g. 4-layer PCB, food-grade steel drum"
+                required
+                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
+              />
+            </label>
+            <label className="block">
+              <div className="mono-label mb-1.5">Quantity</div>
+              <input
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="10,000 units / 500 kg"
+                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
+              />
+            </label>
+            <label className="block">
+              <div className="mono-label mb-1.5">Category</div>
+              <input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Electronics / Packaging / …"
+                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <div className="mono-label mb-1.5">Message (optional)</div>
+              <textarea
+                rows={3}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Delivery timelines, quality specs, contract terms…"
+                className="w-full resize-none rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
+              />
+            </label>
+            {err && (
+              <div className="sm:col-span-2 rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                {err}
+              </div>
+            )}
+            <div className="sm:col-span-2 flex items-center justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-md border border-border px-4 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busy || !orgId || product.trim().length < 1}
+                className="rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
+              >
+                {busy ? "Sending…" : "Send request →"}
+              </button>
             </div>
-          )}
-          <div className="sm:col-span-2 flex items-center justify-end gap-2 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-border px-4 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={busy || form.legal_name.trim().length < 2}
-              className="rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
-            >
-              {busy ? "Saving…" : "Add supplier →"}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
-  );
-}
-
-function F({
-  label,
-  value,
-  onChange,
-  placeholder,
-  className = "",
-  type = "text",
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  className?: string;
-  type?: string;
-  required?: boolean;
-}) {
-  return (
-    <label className={`block ${className}`}>
-      <div className="mono-label mb-1.5">{label}</div>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        required={required}
-        className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
-      />
-    </label>
   );
 }
