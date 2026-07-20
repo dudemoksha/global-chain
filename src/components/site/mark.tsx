@@ -16,7 +16,7 @@ export function Mark({ className = "" }: { className?: string }) {
         <circle cx="6.5" cy="7" r="1" fill="currentColor" />
         <circle cx="15.5" cy="15" r="1" fill="currentColor" />
       </svg>
-      <span className="font-display text-[15px] font-600 tracking-tight text-foreground">
+      <span className="font-display text-[15px] font-semibold tracking-tight text-foreground">
         Global<span className="text-primary">·</span>Chain
       </span>
     </div>

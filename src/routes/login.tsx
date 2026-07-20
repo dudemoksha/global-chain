@@ -31,7 +31,7 @@ function LoginPage() {
 
         <div className="max-w-md">
           <div className="mono-label">Operators' Bulletin · Vol 04</div>
-          <blockquote className="mt-6 font-display text-[28px] font-500 leading-[1.2] tracking-tight text-foreground">
+          <blockquote className="mt-6 font-display text-[28px] font-medium leading-[1.2] tracking-tight text-foreground">
             &ldquo;We caught a tier-three failure eleven days before it would
             have reached the assembly line. That's the whole thesis.&rdquo;
           </blockquote>
@@ -59,7 +59,7 @@ function LoginPage() {
           </Link>
           <div className="mt-8 lg:mt-0">
             <div className="mono-label">§ Access</div>
-            <h1 className="mt-3 font-display text-[30px] font-500 tracking-tight">
+            <h1 className="mt-3 font-display text-[30px] font-medium tracking-tight">
               Operator sign-in
             </h1>
             <p className="mt-2 text-[13.5px] text-muted-foreground">

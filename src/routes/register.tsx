@@ -83,7 +83,7 @@ function RegisterPage() {
         {/* Stepper */}
         <aside>
           <div className="mono-label">§ Enrolment</div>
-          <h1 className="mt-3 font-display text-[28px] font-500 leading-[1.15] tracking-tight">
+          <h1 className="mt-3 font-display text-[28px] font-medium leading-[1.15] tracking-tight">
             Request organisational access.
           </h1>
           <p className="mt-3 text-[13px] text-muted-foreground">
@@ -301,7 +301,7 @@ function SubmittedPanel({ org, email }: { org: string; email: string }) {
   return (
     <div className="p-8 animate-rise">
       <div className="mono-label !text-primary">§ Received</div>
-      <h2 className="mt-3 font-display text-[26px] font-500 tracking-tight">
+      <h2 className="mt-3 font-display text-[26px] font-medium tracking-tight">
         Your request is in the queue.
       </h2>
       <p className="mt-3 max-w-md text-[13.5px] text-muted-foreground">
@@ -318,7 +318,7 @@ function SubmittedPanel({ org, email }: { org: string; email: string }) {
         ].map(([k, v]) => (
           <div key={k} className="rounded-md border border-border p-3">
             <div className="mono-label">{k}</div>
-            <div className="mt-1 font-display text-[16px] font-500">{v}</div>
+            <div className="mt-1 font-display text-[16px] font-medium">{v}</div>
           </div>
         ))}
       </div>

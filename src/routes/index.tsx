@@ -35,7 +35,7 @@ function Hero() {
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
             Rev 01 · Supply Chain Intelligence
           </div>
-          <h1 className="mt-6 font-display text-[44px] font-500 leading-[1.05] tracking-tight md:text-[64px]">
+          <h1 className="mt-6 font-display text-[44px] font-medium leading-[1.05] tracking-tight md:text-[64px]">
             See the suppliers
             <br />
             <span className="text-muted-foreground">behind your suppliers.</span>
@@ -73,7 +73,7 @@ function Hero() {
             ].map(([v, l]) => (
               <div key={l as string}>
                 <dt className="mono-label">{l}</dt>
-                <dd className="mt-1 font-display text-[22px] font-500 tracking-tight">
+                <dd className="mt-1 font-display text-[22px] font-medium tracking-tight">
                   {v}
                 </dd>
               </div>
@@ -137,8 +137,8 @@ function Ticker() {
           Live feed
         </div>
         <div className="relative flex-1 overflow-hidden">
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-surface to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-surface to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-[linear-gradient(to_right,var(--color-surface),transparent)]" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-[linear-gradient(to_left,var(--color-surface),transparent)]" />
           <div className="flex animate-[gc-scan_60s_linear_infinite] gap-10 whitespace-nowrap">
             {[...items, ...items].map((t, i) => (
               <span key={i} className="text-[12px] text-muted-foreground">
@@ -184,7 +184,7 @@ function Method() {
         <div className="grid gap-10 md:grid-cols-[1fr_2fr]">
           <div className="md:sticky md:top-24 md:self-start">
             <div className="mono-label">§ Method</div>
-            <h2 className="mt-4 font-display text-[36px] font-500 leading-[1.1] tracking-tight md:text-[42px]">
+            <h2 className="mt-4 font-display text-[36px] font-medium leading-[1.1] tracking-tight md:text-[42px]">
               Private at the surface. <br />
               Connected underneath.
             </h2>
@@ -198,7 +198,7 @@ function Method() {
               <li key={s.n} className="grid gap-6 py-8 md:grid-cols-[80px_1fr]">
                 <div className="font-mono text-[12px] tracking-widest text-primary">{s.n}</div>
                 <div>
-                  <h3 className="font-display text-[20px] font-500 tracking-tight">{s.h}</h3>
+                  <h3 className="font-display text-[20px] font-medium tracking-tight">{s.h}</h3>
                   <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-muted-foreground">
                     {s.p}
                   </p>
@@ -229,7 +229,7 @@ function Intelligence() {
         <div className="flex items-end justify-between gap-6">
           <div>
             <div className="mono-label">§ Intelligence</div>
-            <h2 className="mt-4 max-w-2xl font-display text-[36px] font-500 leading-[1.1] tracking-tight md:text-[42px]">
+            <h2 className="mt-4 max-w-2xl font-display text-[36px] font-medium leading-[1.1] tracking-tight md:text-[42px]">
               Six signal families, continuously reconciled to your graph.
             </h2>
           </div>
@@ -253,7 +253,7 @@ function Intelligence() {
                   ACTIVE
                 </span>
               </div>
-              <h3 className="mt-6 font-display text-[19px] font-500 tracking-tight">
+              <h3 className="mt-6 font-display text-[19px] font-medium tracking-tight">
                 {f.n}
               </h3>
               <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
@@ -301,7 +301,7 @@ function Simulation() {
             ].map(([k, v]) => (
               <div key={k}>
                 <div className="mono-label">{k}</div>
-                <div className="mt-1 font-display text-[18px] font-500">{v}</div>
+                <div className="mt-1 font-display text-[18px] font-medium">{v}</div>
               </div>
             ))}
           </div>
@@ -316,7 +316,7 @@ function Simulation() {
 
         <div className="md:pt-6">
           <div className="mono-label">§ What-if</div>
-          <h2 className="mt-4 font-display text-[36px] font-500 leading-[1.1] tracking-tight md:text-[42px]">
+          <h2 className="mt-4 font-display text-[36px] font-medium leading-[1.1] tracking-tight md:text-[42px]">
             Rehearse the disruption. Keep the ledger untouched.
           </h2>
           <p className="mt-5 max-w-md text-[14px] leading-relaxed text-muted-foreground">
@@ -351,7 +351,7 @@ function Enterprise() {
         <div className="grid gap-12 md:grid-cols-3">
           <div className="md:col-span-1">
             <div className="mono-label">§ Enterprise</div>
-            <h2 className="mt-4 font-display text-[36px] font-500 leading-[1.1] tracking-tight">
+            <h2 className="mt-4 font-display text-[36px] font-medium leading-[1.1] tracking-tight">
               Built for the operators who cannot afford surprise.
             </h2>
           </div>
@@ -376,7 +376,7 @@ function Enterprise() {
                 },
               ].map((f) => (
                 <div key={f.h}>
-                  <dt className="font-display text-[17px] font-500 tracking-tight">
+                  <dt className="font-display text-[17px] font-medium tracking-tight">
                     {f.h}
                   </dt>
                   <dd className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
@@ -400,7 +400,7 @@ function ClosingCTA() {
       <div className="mx-auto flex max-w-[1240px] flex-col items-start justify-between gap-8 px-6 py-20 md:flex-row md:items-end">
         <div>
           <div className="mono-label">§ Access</div>
-          <h2 className="mt-4 max-w-2xl font-display text-[36px] font-500 leading-[1.05] tracking-tight md:text-[48px]">
+          <h2 className="mt-4 max-w-2xl font-display text-[36px] font-medium leading-[1.05] tracking-tight md:text-[48px]">
             Enrolment is by review. <br />
             <span className="text-muted-foreground">
               Submit your organisation for approval.
