@@ -84,8 +84,13 @@ function RegisterPage() {
 
   async function submit() {
     setErr(null);
+    const pwErr = validatePassword(form.password);
+    if (pwErr) {
+      setErr(pwErr);
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
+
       email: form.workEmail,
       password: form.password,
       options: {
