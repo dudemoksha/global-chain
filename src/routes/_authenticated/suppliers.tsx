@@ -116,38 +116,28 @@ function SuppliersPage() {
             <Mark />
           </Link>
           <nav className="hidden items-center gap-6 md:flex">
-            <Link
-              to="/dashboard"
-              className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{ className: "text-primary" }}
-            >
-              Dashboard
-            </Link>
-            <Link
-              to="/suppliers"
-              className="text-[13px] font-medium"
-              activeProps={{ className: "text-primary" }}
-            >
-              Suppliers
-            </Link>
+            <Link to="/dashboard" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Dashboard</Link>
+            <Link to="/suppliers" className="text-[13px] font-medium text-primary">Suppliers</Link>
+            <Link to="/globe" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Globe</Link>
+            <Link to="/signals" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Signals</Link>
+            <Link to="/alerts" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Alerts</Link>
             {me.isAdmin && (
-              <Link
-                to="/admin/requests"
-                className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-              >
-                Admin
-              </Link>
+              <Link to="/admin/requests" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Trust desk</Link>
             )}
           </nav>
-          <button
-            type="button"
-            onClick={signOut}
-            className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-3">
+            <AlertBell />
+            <button
+              type="button"
+              onClick={signOut}
+              className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
+
 
       <div className="mx-auto max-w-[1240px] px-6 py-14">
         <div className="flex flex-wrap items-end justify-between gap-4">
