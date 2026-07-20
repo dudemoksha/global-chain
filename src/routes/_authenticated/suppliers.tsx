@@ -390,11 +390,28 @@ function RequestSupplierDialog({
   const [quantity, setQuantity] = useState("");
   const [category, setCategory] = useState("");
   const [message, setMessage] = useState("");
+  const [products, setProducts] = useState<Array<{ sku: string; name: string; unit: string }>>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  useEffect(() => {
+    setProduct("");
+    setProducts([]);
+    if (!orgId) return;
+    setLoadingProducts(true);
+    listOrgProducts({ data: { org_id: orgId } })
+      .then((res) => setProducts(res))
+      .catch(() => setProducts([]))
+      .finally(() => setLoadingProducts(false));
+  }, [orgId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!orgId) {
       setErr("Pick an organisation from the dropdown first.");
+      return;
+    }
+    if (!product.trim()) {
+      setErr("Pick a product from the supplier's catalogue.");
       return;
     }
     setBusy(true);
@@ -444,14 +461,32 @@ function RequestSupplierDialog({
               </p>
             </div>
             <label className="block sm:col-span-2">
-              <div className="mono-label mb-1.5">Product / SKU you need</div>
-              <input
+              <div className="mono-label mb-1.5">Product (from supplier's catalogue)</div>
+              <select
                 value={product}
                 onChange={(e) => setProduct(e.target.value)}
-                placeholder="e.g. 4-layer PCB, food-grade steel drum"
                 required
-                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
-              />
+                disabled={!orgId || loadingProducts || products.length === 0}
+                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground disabled:opacity-60"
+              >
+                <option value="">
+                  {!orgId
+                    ? "Pick a supplier first…"
+                    : loadingProducts
+                      ? "Loading catalogue…"
+                      : products.length === 0
+                        ? "This supplier hasn't listed any SKUs yet"
+                        : "Select a product…"}
+                </option>
+                {products.map((p) => (
+                  <option key={p.sku} value={p.name}>
+                    {p.name} · {p.sku} ({p.unit})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">
+                Products are pulled live from what this supplier actually sells on Global-Chain.
+              </p>
             </label>
             <label className="block">
               <div className="mono-label mb-1.5">Quantity</div>
