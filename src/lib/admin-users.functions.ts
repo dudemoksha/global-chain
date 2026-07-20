@@ -112,8 +112,9 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
     if (Object.keys(patch).length) {
       const { error } = await supabaseAdmin
         .from("profiles")
-        .update(patch)
+        .update(patch as any)
         .eq("id", data.userId);
+
       if (error) throw error;
     }
 
