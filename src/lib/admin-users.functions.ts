@@ -101,25 +101,56 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
     await assertAdmin(supabase, actorId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    const fieldMap: Record<string, string> = {
+      fullName: "full_name",
+      legalName: "legal_name",
+      jobTitle: "job_title",
+      hqCountry: "hq_country",
+      industry: "industry",
+      tierRole: "tier_role",
+    };
+
+    const { data: prev } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, legal_name, job_title, hq_country, industry, tier_role, work_email")
+      .eq("id", data.userId)
+      .maybeSingle();
+
     const patch: Record<string, string> = {};
-    if (data.fullName !== undefined) patch.full_name = data.fullName;
-    if (data.legalName !== undefined) patch.legal_name = data.legalName;
-    if (data.jobTitle !== undefined) patch.job_title = data.jobTitle;
-    if (data.hqCountry !== undefined) patch.hq_country = data.hqCountry;
-    if (data.industry !== undefined) patch.industry = data.industry;
-    if (data.tierRole !== undefined) patch.tier_role = data.tierRole;
+    const changes: Record<string, { from: string; to: string }> = {};
+    for (const [k, col] of Object.entries(fieldMap)) {
+      const v = (data as any)[k];
+      if (v === undefined) continue;
+      patch[col] = v;
+      const before = (prev as any)?.[col] ?? "";
+      if (String(before) !== String(v)) {
+        changes[col] = { from: String(before), to: String(v) };
+      }
+    }
 
     if (Object.keys(patch).length) {
       const { error } = await supabaseAdmin
         .from("profiles")
         .update(patch as any)
         .eq("id", data.userId);
-
       if (error) throw error;
     }
 
+    let roleChange: { from: string; to: string } | null = null;
     if (data.role) {
-      if (data.role === "admin") {
+      const { data: existingRoles } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.userId);
+      const wasAdmin = (existingRoles ?? []).some((r: any) => r.role === "admin");
+      const willAdmin = data.role === "admin";
+      if (wasAdmin !== willAdmin) {
+        roleChange = {
+          from: wasAdmin ? "admin" : "user",
+          to: willAdmin ? "admin" : "user",
+        };
+      }
+      if (willAdmin) {
         await supabaseAdmin
           .from("user_roles")
           .upsert(
@@ -135,13 +166,24 @@ export const adminUpdateUser = createServerFn({ method: "POST" })
       }
     }
 
-    await supabaseAdmin.from("audit_logs").insert({
-      actor_id: actorId,
-      action: "user.update",
-      target_type: "profile",
-      target_id: data.userId,
-      meta: { fields: Object.keys(patch), role: data.role ?? null },
-    });
+    if (Object.keys(changes).length) {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_id: actorId,
+        action: "user.profile_update",
+        target_type: "profile",
+        target_id: data.userId,
+        meta: { email: (prev as any)?.work_email ?? null, changes, by: "admin" },
+      });
+    }
+    if (roleChange) {
+      await supabaseAdmin.from("audit_logs").insert({
+        actor_id: actorId,
+        action: "user.role_change",
+        target_type: "profile",
+        target_id: data.userId,
+        meta: { email: (prev as any)?.work_email ?? null, ...roleChange, by: "admin" },
+      });
+    }
 
     return { ok: true };
   });
@@ -161,6 +203,11 @@ export const adminSetPassword = createServerFn({ method: "POST" })
     const { supabase, userId: actorId } = context;
     await assertAdmin(supabase, actorId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prev } = await supabaseAdmin
+      .from("profiles")
+      .select("work_email")
+      .eq("id", data.userId)
+      .maybeSingle();
     const { error } = await supabaseAdmin.auth.admin.updateUserById(
       data.userId,
       { password: data.password },
@@ -171,7 +218,7 @@ export const adminSetPassword = createServerFn({ method: "POST" })
       action: "user.password_reset",
       target_type: "profile",
       target_id: data.userId,
-      meta: {},
+      meta: { email: (prev as any)?.work_email ?? null, by: "admin" },
     });
     return { ok: true };
   });
@@ -186,6 +233,11 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     await assertAdmin(supabase, actorId);
     if (data.userId === actorId) throw new Error("You cannot delete yourself.");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prev } = await supabaseAdmin
+      .from("profiles")
+      .select("work_email, full_name")
+      .eq("id", data.userId)
+      .maybeSingle();
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
     if (error) throw error;
     await supabaseAdmin.from("audit_logs").insert({
@@ -193,7 +245,11 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
       action: "user.delete",
       target_type: "profile",
       target_id: data.userId,
-      meta: {},
+      meta: {
+        email: (prev as any)?.work_email ?? null,
+        full_name: (prev as any)?.full_name ?? null,
+        by: "admin",
+      },
     });
     return { ok: true };
   });

@@ -1796,18 +1796,45 @@ function UserActivityModal({
                         </div>
                       </td>
                       <td className="px-6 py-3 text-[11.5px] text-muted-foreground">
-                        {meta.timezone && (
-                          <div>TZ: {meta.timezone}</div>
+                        {meta.by && (
+                          <div className="mb-1 text-[10.5px] uppercase tracking-wide">
+                            By {meta.by === "self" ? "user" : "admin"}
+                          </div>
                         )}
+                        {meta.changes && typeof meta.changes === "object" && (
+                          <div className="mb-1 space-y-0.5">
+                            {Object.entries(meta.changes as Record<string, { from: string; to: string }>).map(
+                              ([field, diff]) => (
+                                <div key={field}>
+                                  <span className="font-medium text-foreground">
+                                    {field.replace(/_/g, " ")}
+                                  </span>
+                                  : <span className="line-through">{diff.from || "—"}</span>
+                                  {" → "}
+                                  <span className="text-foreground">{diff.to || "—"}</span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        )}
+                        {meta.from && meta.to && !meta.changes && (
+                          <div>
+                            role: <span className="line-through">{meta.from}</span>
+                            {" → "}
+                            <span className="text-foreground">{meta.to}</span>
+                          </div>
+                        )}
+                        {meta.reason && <div>Reason: {meta.reason}</div>}
+                        {meta.email && !meta.changes && !meta.from && (
+                          <div>Email: {meta.email}</div>
+                        )}
+                        {meta.timezone && <div>TZ: {meta.timezone}</div>}
                         {meta.language && <div>Lang: {meta.language}</div>}
                         {meta.screen && <div>Screen: {meta.screen}</div>}
                         {meta.user_agent && (
                           <div className="mt-1 line-clamp-2 break-all">
                             {meta.user_agent}
                           </div>
-                        )}
-                        {!meta.user_agent && r.target_type !== "session" && (
-                          <div>Target: {r.target_type}</div>
                         )}
                       </td>
                     </tr>
@@ -1823,23 +1850,25 @@ function UserActivityModal({
 }
 
 function ActionPill({ action }: { action: string }) {
-  const isLogin = action === "auth.login";
-  const isLogout = action === "auth.logout";
-  const cls = isLogin
-    ? "bg-primary/10 text-primary"
-    : isLogout
-      ? "bg-surface text-foreground"
-      : "bg-accent text-foreground";
-  const label = isLogin
-    ? "Login"
-    : isLogout
-      ? "Logout"
-      : action.replace(/^user\./, "").replace(/^company\./, "");
+  const map: Record<string, { label: string; cls: string }> = {
+    "auth.login": { label: "Login", cls: "bg-primary/10 text-primary" },
+    "auth.logout": { label: "Logout", cls: "bg-surface text-foreground" },
+    "user.create": { label: "User created", cls: "bg-accent text-foreground" },
+    "user.delete": { label: "User deleted", cls: "bg-accent text-foreground" },
+    "user.profile_update": { label: "Profile updated", cls: "bg-accent text-foreground" },
+    "user.password_reset": { label: "Password reset", cls: "bg-accent text-foreground" },
+    "user.password_change": { label: "Password changed", cls: "bg-accent text-foreground" },
+    "user.role_change": { label: "Role changed", cls: "bg-accent text-foreground" },
+    "user.approved": { label: "Approved", cls: "bg-primary/10 text-primary" },
+    "user.rejected": { label: "Rejected", cls: "bg-accent text-foreground" },
+  };
+  const entry = map[action] ?? {
+    label: action.replace(/^user\./, "").replace(/^company\./, "").replace(/_/g, " "),
+    cls: "bg-accent text-foreground",
+  };
   return (
-    <span
-      className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${cls}`}
-    >
-      {label}
+    <span className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${entry.cls}`}>
+      {entry.label}
     </span>
   );
 }
