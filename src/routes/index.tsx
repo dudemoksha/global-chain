@@ -137,8 +137,6 @@ function Ticker() {
           Live feed
         </div>
         <div className="relative flex-1 overflow-hidden">
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-[linear-gradient(to_right,var(--color-surface),transparent)]" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-[linear-gradient(to_left,var(--color-surface),transparent)]" />
           <div className="flex animate-[gc-scan_60s_linear_infinite] gap-10 whitespace-nowrap">
             {[...items, ...items].map((t, i) => (
               <span key={i} className="text-[12px] text-muted-foreground">
