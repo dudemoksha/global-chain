@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
 import { generateSignals, severityColor, severityLabel } from "@/lib/risk-signals";
+import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 import { useRouter } from "@tanstack/react-router";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
@@ -124,6 +125,24 @@ function MainGrid() {
       );
     return generateSignals(orgs);
   }, [suppliers, graph]);
+
+  // Drive recommendations off the highest-severity signal touching a tier-1 supplier.
+  const rec = useMemo(() => {
+    const sevRank = { critical: 3, high: 2, medium: 1, low: 0 } as const;
+    const top = [...signals].sort(
+      (a, b) => (sevRank[b.severity] ?? 0) - (sevRank[a.severity] ?? 0),
+    )[0];
+    if (!top) return null;
+    const impacted = suppliers.find(
+      (s) => s.organizations?.country === top.country,
+    );
+    return {
+      country: top.country,
+      industry: impacted?.organizations?.industry ?? "",
+      category: impacted?.category ?? "",
+      headline: top.headline,
+    };
+  }, [signals, suppliers]);
 
   return (
     <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_360px]">
