@@ -141,6 +141,7 @@ export type Database = {
           created_at: string
           current_stock: number
           id: string
+          monthly_production: number
           name: string
           owner_id: string
           reorder_level: number
@@ -149,11 +150,14 @@ export type Database = {
           unit: string
           updated_at: string
           warehouse: string
+          warehouse_capacity: number
+          warehouse_id: string | null
         }
         Insert: {
           created_at?: string
           current_stock?: number
           id?: string
+          monthly_production?: number
           name: string
           owner_id: string
           reorder_level?: number
@@ -162,11 +166,14 @@ export type Database = {
           unit?: string
           updated_at?: string
           warehouse?: string
+          warehouse_capacity?: number
+          warehouse_id?: string | null
         }
         Update: {
           created_at?: string
           current_stock?: number
           id?: string
+          monthly_production?: number
           name?: string
           owner_id?: string
           reorder_level?: number
@@ -175,8 +182,18 @@ export type Database = {
           unit?: string
           updated_at?: string
           warehouse?: string
+          warehouse_capacity?: number
+          warehouse_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "inventory_items_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       organizations: {
         Row: {
@@ -458,6 +475,48 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      warehouses: {
+        Row: {
+          address: string
+          capacity_units: number
+          city: string
+          country: string
+          created_at: string
+          id: string
+          lat: number | null
+          lng: number | null
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string
+          capacity_units?: number
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          capacity_units?: number
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name?: string
+          owner_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
