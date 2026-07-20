@@ -118,10 +118,12 @@ export const removeSupplier = createServerFn({ method: "POST" })
 export const getMySupplyGraph = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const { data, error } = await supabase.rpc("get_supply_graph", {
+    const { userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin.rpc("get_supply_graph", {
       _user_id: userId,
     });
     if (error) throw error;
     return data ?? [];
   });
+
