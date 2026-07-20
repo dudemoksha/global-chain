@@ -203,6 +203,11 @@ export const adminSetPassword = createServerFn({ method: "POST" })
     const { supabase, userId: actorId } = context;
     await assertAdmin(supabase, actorId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: prev } = await supabaseAdmin
+      .from("profiles")
+      .select("work_email")
+      .eq("id", data.userId)
+      .maybeSingle();
     const { error } = await supabaseAdmin.auth.admin.updateUserById(
       data.userId,
       { password: data.password },
@@ -213,7 +218,7 @@ export const adminSetPassword = createServerFn({ method: "POST" })
       action: "user.password_reset",
       target_type: "profile",
       target_id: data.userId,
-      meta: {},
+      meta: { email: (prev as any)?.work_email ?? null, by: "admin" },
     });
     return { ok: true };
   });
