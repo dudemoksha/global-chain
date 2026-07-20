@@ -9,12 +9,15 @@ import { AppShell } from "@/components/site/app-shell";
 import {
   listMySuppliers,
   removeSupplier,
+  setSupplierStopped,
 } from "@/lib/suppliers.functions";
 import {
+  listOrgProducts,
   searchOrganizations,
   sendTradeRequest,
 } from "@/lib/trade-requests.functions";
 import { getMyProfile } from "@/lib/profile.functions";
+import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const listQuery = queryOptions({
