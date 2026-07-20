@@ -840,6 +840,9 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
             {queue.length} companies queued for the trust desk.
           </div>
         </div>
+      </div>
+
+
 
       {queue.length === 0 ? (
         <div className="p-10 text-center text-[13px] text-muted-foreground">
@@ -894,6 +897,9 @@ function AdminCompanies({ profiles }: { profiles: any[] }) {
             {approved.length} approved companies on Global-Chain.
           </div>
         </div>
+      </div>
+
+
 
       {approved.length === 0 ? (
         <div className="p-10 text-center text-[13px] text-muted-foreground">

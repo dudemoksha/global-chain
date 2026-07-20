@@ -121,10 +121,8 @@ function SuppliersPage() {
             <Link to="/globe" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Globe</Link>
             <Link to="/signals" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Signals</Link>
             <Link to="/alerts" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Alerts</Link>
-            {me.isAdmin && (
-              <Link to="/admin/requests" className="text-[13px] font-medium text-muted-foreground hover:text-foreground">Trust desk</Link>
-            )}
           </nav>
+
           <div className="flex items-center gap-3">
             <AlertBell />
             <button
