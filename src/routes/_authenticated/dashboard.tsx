@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   queryOptions,
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -25,6 +26,7 @@ import {
   adminSetPassword,
 } from "@/lib/admin-users.functions";
 import { PASSWORD_RULE, validatePassword } from "@/lib/password";
+import { adminGetUserActivity } from "@/lib/activity.functions";
 
 import {
   generateSignals,
