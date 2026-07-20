@@ -10,15 +10,12 @@ type NavItem = { to: string; label: string };
 
 const USER_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
+  { to: "/inventory", label: "My SKUs" },
   { to: "/suppliers", label: "Suppliers" },
-  { to: "/factories", label: "Factories" },
-  { to: "/inventory", label: "Inventory" },
-  { to: "/globe", label: "Globe" },
-  { to: "/signals", label: "Signals" },
-  { to: "/simulation", label: "Simulation" },
   { to: "/uploads", label: "Uploads" },
   { to: "/assistant", label: "Assistant" },
 ];
+
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
