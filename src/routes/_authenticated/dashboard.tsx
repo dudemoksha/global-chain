@@ -1796,18 +1796,45 @@ function UserActivityModal({
                         </div>
                       </td>
                       <td className="px-6 py-3 text-[11.5px] text-muted-foreground">
-                        {meta.timezone && (
-                          <div>TZ: {meta.timezone}</div>
+                        {meta.by && (
+                          <div className="mb-1 text-[10.5px] uppercase tracking-wide">
+                            By {meta.by === "self" ? "user" : "admin"}
+                          </div>
                         )}
+                        {meta.changes && typeof meta.changes === "object" && (
+                          <div className="mb-1 space-y-0.5">
+                            {Object.entries(meta.changes as Record<string, { from: string; to: string }>).map(
+                              ([field, diff]) => (
+                                <div key={field}>
+                                  <span className="font-medium text-foreground">
+                                    {field.replace(/_/g, " ")}
+                                  </span>
+                                  : <span className="line-through">{diff.from || "—"}</span>
+                                  {" → "}
+                                  <span className="text-foreground">{diff.to || "—"}</span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        )}
+                        {meta.from && meta.to && !meta.changes && (
+                          <div>
+                            role: <span className="line-through">{meta.from}</span>
+                            {" → "}
+                            <span className="text-foreground">{meta.to}</span>
+                          </div>
+                        )}
+                        {meta.reason && <div>Reason: {meta.reason}</div>}
+                        {meta.email && !meta.changes && !meta.from && (
+                          <div>Email: {meta.email}</div>
+                        )}
+                        {meta.timezone && <div>TZ: {meta.timezone}</div>}
                         {meta.language && <div>Lang: {meta.language}</div>}
                         {meta.screen && <div>Screen: {meta.screen}</div>}
                         {meta.user_agent && (
                           <div className="mt-1 line-clamp-2 break-all">
                             {meta.user_agent}
                           </div>
-                        )}
-                        {!meta.user_agent && r.target_type !== "session" && (
-                          <div>Target: {r.target_type}</div>
                         )}
                       </td>
                     </tr>
