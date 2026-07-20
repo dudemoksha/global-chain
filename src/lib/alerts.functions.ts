@@ -107,6 +107,31 @@ export const syncAlerts = createServerFn({ method: "POST" })
         };
       }),
     );
+
+    // --- Live ingestion (GDELT + USGS) ---
+    try {
+      const { fetchLiveSignals } = await import("./live-signals.server");
+      const live = await fetchLiveSignals(orgs);
+      for (const ev of live) {
+        for (const orgId of ev.affectsOrgIds) {
+          const org = orgById.get(orgId);
+          rows.push({
+            user_id: userId,
+            signal_key: `${ev.id}:${orgId}`,
+            kind: ev.kind,
+            severity: ev.severity,
+            country: ev.country,
+            headline: ev.headline.slice(0, 300),
+            detail: ev.detail,
+            supplier_org_id: orgId,
+            supplier_name: org?.name ?? null,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("live ingest failed", e);
+    }
+
     if (rows.length === 0) return { inserted: 0 };
 
     // Only insert critical/high by default — noise reduction.
@@ -125,6 +150,7 @@ export const syncAlerts = createServerFn({ method: "POST" })
     if (error) throw error;
     return { inserted: count ?? 0 };
   });
+
 
 export const markAlertRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
