@@ -1272,6 +1272,38 @@ function ModalField({
 const inputCls =
   "h-9 w-full rounded-md border border-border bg-background px-3 text-[13px] outline-none focus:border-primary";
 
+function PasswordInput({
+  value,
+  onChange,
+  required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  const [reveal, setReveal] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        type={reveal ? "text" : "password"}
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${inputCls} pr-14`}
+      />
+      <button
+        type="button"
+        onClick={() => setReveal((v) => !v)}
+        className="absolute inset-y-0 right-2 my-auto h-7 rounded px-2 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+        tabIndex={-1}
+        aria-label={reveal ? "Hide password" : "Show password"}
+      >
+        {reveal ? "Hide" : "Show"}
+      </button>
+    </div>
+  );
+}
+
 function UserFormModal({
   mode,
   user,
