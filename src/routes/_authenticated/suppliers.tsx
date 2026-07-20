@@ -361,6 +361,27 @@ function CriticalityPill({ c }: { c: Criticality }) {
   );
 }
 
+function WatchStar({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={on ? "Unwatch" : "Watch"}
+      title={on ? "Watching — click to unwatch" : "Watch to prioritise alerts"}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors ${
+        on
+          ? "border-primary/40 text-primary"
+          : "border-border text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      <svg width="13" height="13" viewBox="0 0 16 16" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
+        <path d="M8 1.8 10 6l4.4.4-3.4 3 1 4.4L8 11.6 3.9 13.8l1-4.4-3.4-3L6 6Z" />
+      </svg>
+    </button>
+  );
+}
+
 function AddSupplierDialog({
   onClose,
   onSaved,
