@@ -752,13 +752,8 @@ function AdminOverview({
         <div className="rounded-md border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <div className="mono-label">Recent registrations</div>
-            <Link
-              to="/admin/requests"
-              className="text-[12px] font-medium text-primary hover:underline"
-            >
-              Review queue →
-            </Link>
           </div>
+
           {recent.length === 0 ? (
             <div className="p-10 text-center text-[13px] text-muted-foreground">
               No registrations yet.
