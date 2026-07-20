@@ -1,4 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+
 import {
   queryOptions,
   useMutation,
@@ -9,12 +11,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
-import { getMyProfile, listAllProfiles } from "@/lib/profile.functions";
+import { getMyProfile, listAllProfiles, decideProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
 import { listInventory } from "@/lib/inventory.functions";
 import { listFactories } from "@/lib/factories.functions";
 import { syncAlerts } from "@/lib/alerts.functions";
-import { platformStats } from "@/lib/admin.functions";
+import { platformStats, setCompanyStatus } from "@/lib/admin.functions";
+import {
+  adminListUsers,
+  adminCreateUser,
+  adminUpdateUser,
+  adminDeleteUser,
+  adminSetPassword,
+} from "@/lib/admin-users.functions";
+import { PASSWORD_RULE, validatePassword } from "@/lib/password";
+
 import {
   generateSignals,
   severityColor,
@@ -49,6 +60,11 @@ const adminProfilesQuery = queryOptions({
   queryKey: ["admin", "profiles"],
   queryFn: () => listAllProfiles(),
 });
+const adminUsersQuery = queryOptions({
+  queryKey: ["admin", "users"],
+  queryFn: () => adminListUsers(),
+});
+
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -63,7 +79,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       await Promise.all([
         context.queryClient.ensureQueryData(adminStatsQuery).catch(() => null),
         context.queryClient.ensureQueryData(adminProfilesQuery).catch(() => []),
+        context.queryClient.ensureQueryData(adminUsersQuery).catch(() => []),
       ]);
+
     } else if (me.profile?.is_approved) {
       await Promise.all([
         context.queryClient.ensureQueryData(suppliersQuery).catch(() => []),
@@ -621,12 +639,13 @@ function UserNetwork({
 
 /* ═══════════════════════════ ADMIN DASHBOARD ═══════════════════════════ */
 
-type AdminTab = "overview" | "approvals" | "companies" | "activity";
+type AdminTab = "overview" | "approvals" | "users" | "activity";
 
 function AdminDashboard() {
   const [tab, setTab] = useState<AdminTab>("overview");
   const { data: stats } = useSuspenseQuery(adminStatsQuery);
   const { data: profiles } = useSuspenseQuery(adminProfilesQuery);
+  const { data: users } = useSuspenseQuery(adminUsersQuery);
 
   const pending = profiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
   const approved = profiles.filter((p) => p.is_approved).length;
@@ -635,7 +654,7 @@ function AdminDashboard() {
   const ADMIN_TABS: { id: AdminTab; label: string; badge?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "approvals", label: "Approvals", badge: pending || undefined },
-    { id: "companies", label: "Companies" },
+    { id: "users", label: "Users" },
     { id: "activity", label: "Activity" },
   ];
 
@@ -650,7 +669,7 @@ function AdminDashboard() {
                 Platform control
               </h1>
               <p className="mt-2 text-[13.5px] text-muted-foreground">
-                Vet access, manage companies and audit every privileged action
+                Vet access, manage users and audit every privileged action
                 on Global-Chain.
               </p>
             </div>
@@ -686,12 +705,13 @@ function AdminDashboard() {
           />
         )}
         {tab === "approvals" && <AdminApprovals profiles={profiles} />}
-        {tab === "companies" && <AdminCompanies profiles={profiles} />}
+        {tab === "users" && <AdminUsers users={users} />}
         {tab === "activity" && <AdminActivity profiles={profiles} />}
       </div>
     </>
   );
 }
+
 
 /* ── Admin tab: Overview ── */
 
@@ -830,7 +850,31 @@ function AdminOverview({
 /* ── Admin tab: Approvals ── */
 
 function AdminApprovals({ profiles }: { profiles: any[] }) {
+  const qc = useQueryClient();
   const queue = profiles.filter((p) => !p.is_approved && !p.reviewed_at);
+  const decideFn = useServerFn(decideProfile);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function decide(userId: string, decision: "approve" | "reject") {
+    setBusyId(userId);
+    try {
+      const reason =
+        decision === "reject"
+          ? (window.prompt("Reason for rejection (optional)") ?? "")
+          : undefined;
+      await decideFn({ data: { userId, decision, reason } });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["admin", "profiles"] }),
+        qc.invalidateQueries({ queryKey: ["admin", "users"] }),
+        qc.invalidateQueries({ queryKey: ["admin", "stats"] }),
+      ]);
+    } catch (e) {
+      window.alert((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="rounded-md border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -841,8 +885,6 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
           </div>
         </div>
       </div>
-
-
 
       {queue.length === 0 ? (
         <div className="p-10 text-center text-[13px] text-muted-foreground">
@@ -857,10 +899,11 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
               <th className="px-6 py-3 font-medium">Country</th>
               <th className="px-6 py-3 font-medium">Industry</th>
               <th className="px-6 py-3 font-medium">Submitted</th>
+              <th className="px-6 py-3 font-medium text-right">Decision</th>
             </tr>
           </thead>
           <tbody>
-            {queue.slice(0, 20).map((p) => (
+            {queue.map((p) => (
               <tr key={p.id} className="border-b border-border">
                 <td className="px-6 py-3 font-medium">{p.legal_name || "—"}</td>
                 <td className="px-6 py-3 text-muted-foreground">
@@ -875,6 +918,26 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
                 <td className="px-6 py-3 text-muted-foreground">
                   {new Date(p.created_at).toLocaleDateString()}
                 </td>
+                <td className="px-6 py-3 text-right">
+                  <div className="inline-flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busyId === p.id}
+                      onClick={() => decide(p.id, "approve")}
+                      className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === p.id}
+                      onClick={() => decide(p.id, "reject")}
+                      className="rounded-md border border-border px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -884,65 +947,620 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
   );
 }
 
-/* ── Admin tab: Companies ── */
+/* ── Admin tab: Users (full CRUD) ── */
 
-function AdminCompanies({ profiles }: { profiles: any[] }) {
-  const approved = profiles.filter((p) => p.is_approved);
+type AdminUserRow = {
+  id: string;
+  full_name: string | null;
+  work_email: string | null;
+  legal_name: string | null;
+  job_title: string | null;
+  hq_country: string | null;
+  industry: string | null;
+  tier_role: string | null;
+  is_approved: boolean;
+  status: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  is_admin: boolean;
+};
+
+function AdminUsers({ users }: { users: AdminUserRow[] }) {
+  const qc = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "operator">("all");
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<AdminUserRow | null>(null);
+  const [pwFor, setPwFor] = useState<AdminUserRow | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const setStatusFn = useServerFn(setCompanyStatus);
+  const deleteFn = useServerFn(adminDeleteUser);
+  const updateFn = useServerFn(adminUpdateUser);
+
+  async function invalidate() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["admin", "users"] }),
+      qc.invalidateQueries({ queryKey: ["admin", "profiles"] }),
+      qc.invalidateQueries({ queryKey: ["admin", "stats"] }),
+    ]);
+  }
+
+  async function toggleStatus(u: AdminUserRow) {
+    setBusyId(u.id);
+    try {
+      const next = u.status === "suspended" ? "active" : "suspended";
+      await setStatusFn({ data: { userId: u.id, status: next } });
+      await invalidate();
+    } catch (e) {
+      window.alert((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function toggleRole(u: AdminUserRow) {
+    setBusyId(u.id);
+    try {
+      await updateFn({
+        data: { userId: u.id, role: u.is_admin ? "operator" : "admin" },
+      });
+      await invalidate();
+    } catch (e) {
+      window.alert((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(u: AdminUserRow) {
+    if (!window.confirm(`Permanently delete ${u.work_email}?`)) return;
+    setBusyId(u.id);
+    try {
+      await deleteFn({ data: { userId: u.id } });
+      await invalidate();
+    } catch (e) {
+      window.alert((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const filtered = users.filter((u) => {
+    if (roleFilter === "admin" && !u.is_admin) return false;
+    if (roleFilter === "operator" && u.is_admin) return false;
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return (
+      (u.work_email ?? "").toLowerCase().includes(q) ||
+      (u.legal_name ?? "").toLowerCase().includes(q) ||
+      (u.full_name ?? "").toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="rounded-md border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
         <div>
-          <div className="mono-label">Active companies</div>
+          <div className="mono-label">User management</div>
           <div className="mt-1 text-[13px] text-muted-foreground">
-            {approved.length} approved companies on Global-Chain.
+            {users.length} accounts · {users.filter((u) => u.is_admin).length}{" "}
+            admin · {users.filter((u) => u.status === "suspended").length}{" "}
+            suspended
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search email, company, contact…"
+            className="h-9 w-64 rounded-md border border-border bg-background px-3 text-[13px] outline-none focus:border-primary"
+          />
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as any)}
+            className="h-9 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:border-primary"
+          >
+            <option value="all">All roles</option>
+            <option value="admin">Admins</option>
+            <option value="operator">Operators</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="h-9 rounded-md bg-primary px-3 text-[13px] font-medium text-primary-foreground"
+          >
+            + New user
+          </button>
         </div>
       </div>
 
-
-
-      {approved.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="p-10 text-center text-[13px] text-muted-foreground">
-          No approved companies yet.
+          No users match this filter.
         </div>
       ) : (
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="px-6 py-3 font-medium">Company</th>
-              <th className="px-6 py-3 font-medium">Country</th>
-              <th className="px-6 py-3 font-medium">Industry</th>
-              <th className="px-6 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {approved.slice(0, 20).map((p) => (
-              <tr key={p.id} className="border-b border-border">
-                <td className="px-6 py-3">
-                  <div className="font-medium">{p.legal_name || "—"}</div>
-                  <div className="text-[12px] text-muted-foreground">
-                    {p.work_email}
-                  </div>
-                </td>
-                <td className="px-6 py-3 text-muted-foreground">
-                  {p.hq_country || "—"}
-                </td>
-                <td className="px-6 py-3 text-muted-foreground">
-                  {p.industry || "—"}
-                </td>
-                <td className="px-6 py-3">
-                  <StatusPill status={p.status === "suspended" ? "Suspended" : "Active"} />
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="px-6 py-3 font-medium">Account</th>
+                <th className="px-6 py-3 font-medium">Company</th>
+                <th className="px-6 py-3 font-medium">Country</th>
+                <th className="px-6 py-3 font-medium">Role</th>
+                <th className="px-6 py-3 font-medium">Status</th>
+                <th className="px-6 py-3 font-medium text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((u) => (
+                <tr key={u.id} className="border-b border-border align-top">
+                  <td className="px-6 py-3">
+                    <div className="font-medium">{u.full_name || "—"}</div>
+                    <div className="text-[12px] text-muted-foreground">
+                      {u.work_email}
+                    </div>
+                  </td>
+                  <td className="px-6 py-3">
+                    <div>{u.legal_name || "—"}</div>
+                    <div className="text-[12px] text-muted-foreground">
+                      {u.industry || "—"}
+                    </div>
+                  </td>
+                  <td className="px-6 py-3 text-muted-foreground">
+                    {u.hq_country || "—"}
+                  </td>
+                  <td className="px-6 py-3">
+                    <span
+                      className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${
+                        u.is_admin
+                          ? "bg-primary/10 text-primary"
+                          : "bg-surface text-foreground"
+                      }`}
+                    >
+                      {u.is_admin ? "Admin" : "Operator"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3">
+                    <StatusPill
+                      status={
+                        !u.is_approved
+                          ? u.reviewed_at
+                            ? "Rejected"
+                            : "Pending"
+                          : u.status === "suspended"
+                            ? "Suspended"
+                            : "Active"
+                      }
+                    />
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    <div className="inline-flex flex-wrap justify-end gap-1.5">
+                      <RowBtn onClick={() => setEditing(u)}>Edit</RowBtn>
+                      <RowBtn
+                        onClick={() => setPwFor(u)}
+                        disabled={busyId === u.id}
+                      >
+                        Password
+                      </RowBtn>
+                      <RowBtn
+                        onClick={() => toggleRole(u)}
+                        disabled={busyId === u.id}
+                      >
+                        {u.is_admin ? "Revoke admin" : "Make admin"}
+                      </RowBtn>
+                      <RowBtn
+                        onClick={() => toggleStatus(u)}
+                        disabled={busyId === u.id}
+                      >
+                        {u.status === "suspended" ? "Activate" : "Suspend"}
+                      </RowBtn>
+                      <RowBtn
+                        onClick={() => remove(u)}
+                        disabled={busyId === u.id}
+                        danger
+                      >
+                        Delete
+                      </RowBtn>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {creating && (
+        <UserFormModal
+          mode="create"
+          onClose={() => setCreating(false)}
+          onSaved={async () => {
+            setCreating(false);
+            await invalidate();
+          }}
+        />
+      )}
+      {editing && (
+        <UserFormModal
+          mode="edit"
+          user={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null);
+            await invalidate();
+          }}
+        />
+      )}
+      {pwFor && (
+        <PasswordModal
+          user={pwFor}
+          onClose={() => setPwFor(null)}
+          onSaved={() => setPwFor(null)}
+        />
       )}
     </div>
   );
 }
 
-/* ── Admin tab: Activity ── */
+function RowBtn({
+  children,
+  onClick,
+  disabled,
+  danger,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-md border px-2.5 py-1 text-[12px] font-medium disabled:opacity-40 ${
+        danger
+          ? "border-destructive/30 text-destructive hover:bg-destructive/5"
+          : "border-border text-foreground hover:bg-surface"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ModalShell({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4">
+      <div className="w-full max-w-lg rounded-md border border-border bg-card shadow-lg">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div className="text-[14px] font-medium">{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[13px] text-muted-foreground hover:text-foreground"
+          >
+            Close
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModalField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mono-label mb-1 block">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  "h-9 w-full rounded-md border border-border bg-background px-3 text-[13px] outline-none focus:border-primary";
+
+function UserFormModal({
+  mode,
+  user,
+  onClose,
+  onSaved,
+}: {
+  mode: "create" | "edit";
+  user?: AdminUserRow;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const createFn = useServerFn(adminCreateUser);
+  const updateFn = useServerFn(adminUpdateUser);
+  const [form, setForm] = useState({
+    email: user?.work_email ?? "",
+    password: "",
+    fullName: user?.full_name ?? "",
+    legalName: user?.legal_name ?? "",
+    jobTitle: user?.job_title ?? "",
+    hqCountry: user?.hq_country ?? "",
+    industry: user?.industry ?? "",
+    tierRole: user?.tier_role ?? "",
+    role: (user?.is_admin ? "admin" : "operator") as "admin" | "operator",
+    approve: user?.is_approved ?? true,
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const pwErr = mode === "create" ? validatePassword(form.password) : null;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (mode === "create" && pwErr) {
+      setErr(pwErr);
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "create") {
+        await createFn({
+          data: {
+            email: form.email,
+            password: form.password,
+            fullName: form.fullName,
+            legalName: form.legalName,
+            jobTitle: form.jobTitle,
+            hqCountry: form.hqCountry,
+            industry: form.industry,
+            tierRole: form.tierRole,
+            role: form.role,
+            approve: form.approve,
+          },
+        });
+      } else if (user) {
+        await updateFn({
+          data: {
+            userId: user.id,
+            fullName: form.fullName,
+            legalName: form.legalName,
+            jobTitle: form.jobTitle,
+            hqCountry: form.hqCountry,
+            industry: form.industry,
+            tierRole: form.tierRole,
+            role: form.role,
+          },
+        });
+      }
+      await onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell
+      title={mode === "create" ? "New user" : `Edit · ${user?.work_email}`}
+      onClose={onClose}
+    >
+      <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ModalField label="Work email">
+          <input
+            type="email"
+            required
+            disabled={mode === "edit"}
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            className={inputCls}
+          />
+        </ModalField>
+        {mode === "create" && (
+          <ModalField label="Password">
+            <input
+              type="password"
+              required
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className={inputCls}
+            />
+            <p
+              className={`mt-1 text-[11px] ${
+                pwErr && form.password ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {pwErr && form.password ? pwErr : PASSWORD_RULE}
+            </p>
+          </ModalField>
+        )}
+        <ModalField label="Full name">
+          <input
+            value={form.fullName}
+            onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            className={inputCls}
+          />
+        </ModalField>
+        <ModalField label="Job title">
+          <input
+            value={form.jobTitle}
+            onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+            className={inputCls}
+          />
+        </ModalField>
+        <ModalField label="Company (legal name)">
+          <input
+            value={form.legalName}
+            onChange={(e) => setForm({ ...form, legalName: e.target.value })}
+            className={inputCls}
+          />
+        </ModalField>
+        <ModalField label="HQ country">
+          <input
+            value={form.hqCountry}
+            onChange={(e) => setForm({ ...form, hqCountry: e.target.value })}
+            className={inputCls}
+          />
+        </ModalField>
+        <ModalField label="Industry">
+          <input
+            value={form.industry}
+            onChange={(e) => setForm({ ...form, industry: e.target.value })}
+            className={inputCls}
+          />
+        </ModalField>
+        <ModalField label="Tier role">
+          <input
+            value={form.tierRole}
+            onChange={(e) => setForm({ ...form, tierRole: e.target.value })}
+            className={inputCls}
+            placeholder="e.g. buyer, supplier"
+          />
+        </ModalField>
+        <ModalField label="Role">
+          <select
+            value={form.role}
+            onChange={(e) =>
+              setForm({ ...form, role: e.target.value as "admin" | "operator" })
+            }
+            className={inputCls}
+          >
+            <option value="operator">Operator</option>
+            <option value="admin">Admin</option>
+          </select>
+        </ModalField>
+        {mode === "create" && (
+          <label className="flex items-center gap-2 self-end pb-2 text-[13px]">
+            <input
+              type="checkbox"
+              checked={form.approve}
+              onChange={(e) =>
+                setForm({ ...form, approve: e.target.checked })
+              }
+            />
+            Auto-approve account
+          </label>
+        )}
+
+        {err && (
+          <div className="col-span-full rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+            {err}
+          </div>
+        )}
+
+        <div className="col-span-full mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? "Saving…" : mode === "create" ? "Create user" : "Save changes"}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+function PasswordModal({
+  user,
+  onClose,
+  onSaved,
+}: {
+  user: AdminUserRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const qc = useQueryClient();
+  const setPwFn = useServerFn(adminSetPassword);
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const pwErr = validatePassword(pw);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pwErr) {
+      setErr(pwErr);
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await setPwFn({ data: { userId: user.id, password: pw } });
+      await qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title={`Reset password · ${user.work_email}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <ModalField label="New password">
+          <input
+            type="password"
+            required
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            className={inputCls}
+          />
+          <p
+            className={`mt-1 text-[11px] ${
+              pwErr && pw ? "text-destructive" : "text-muted-foreground"
+            }`}
+          >
+            {pwErr && pw ? pwErr : PASSWORD_RULE}
+          </p>
+        </ModalField>
+        {err && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+            {err}
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border px-3 py-1.5 text-[13px] font-medium hover:bg-surface"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Set password"}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
 
 function AdminActivity({ profiles }: { profiles: any[] }) {
   const recent = [...profiles]

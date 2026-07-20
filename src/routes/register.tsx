@@ -2,6 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
+import { PASSWORD_RULE, validatePassword } from "@/lib/password";
+
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -56,6 +58,11 @@ function RegisterPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const pwError = useMemo(
+    () => (form.password ? validatePassword(form.password) : null),
+    [form.password],
+  );
+
   const canNext = useMemo(() => {
     if (step === 0)
       return form.legalName && form.hqCountry && form.industry && form.tierRole;
@@ -64,10 +71,11 @@ function RegisterPage() {
         form.fullName &&
         form.workEmail &&
         form.jobTitle &&
-        form.password.length >= 8
+        !validatePassword(form.password)
       );
     return true;
   }, [step, form]);
+
 
   const set =
     <K extends keyof FormState>(k: K) =>
@@ -76,8 +84,15 @@ function RegisterPage() {
 
   async function submit() {
     setErr(null);
+    const pwErr = validatePassword(form.password);
+    if (pwErr) {
+      setErr(pwErr);
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.signUp({
+
+
       email: form.workEmail,
       password: form.password,
       options: {
@@ -247,14 +262,25 @@ function RegisterPage() {
                     onChange={set("workEmail")}
                     placeholder="ines@acme.co"
                   />
-                  <Field
-                    className="sm:col-span-2"
-                    label="Password (min. 8 characters)"
-                    type="password"
-                    value={form.password}
-                    onChange={set("password")}
-                    placeholder="••••••••"
-                  />
+                  <div className="sm:col-span-2">
+                    <Field
+                      label="Password"
+                      type="password"
+                      value={form.password}
+                      onChange={set("password")}
+                      placeholder="••••••••"
+                    />
+                    <p
+                      className={`mt-1.5 text-[11.5px] ${
+                        pwError && form.password
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {pwError && form.password ? pwError : PASSWORD_RULE}
+                    </p>
+                  </div>
+
                   <div className="sm:col-span-2">
                     <div className="mono-label mb-1.5">
                       Brief note (optional)
