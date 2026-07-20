@@ -37,7 +37,7 @@ export const askAssistant = createServerFn({ method: "POST" })
         .select("name, country, city, capacity_units, products")
         .eq("owner_id", userId)
         .limit(20),
-      supabase.from("alerts").select("id", { count: "exact", head: true }).eq("read", false),
+      supabase.from("alerts").select("id", { count: "exact", head: true }).is("read_at", null),
     ]);
 
     const ctx = {
