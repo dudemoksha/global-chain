@@ -58,29 +58,60 @@ async function geocode(query: string): Promise<{
   }
 }
 
-/** Search real-world addresses; used by the "add warehouse" autocomplete. */
+/** Search real-world addresses; used by the "add warehouse" autocomplete.
+ *  Biased to populated places (cities, towns, villages) instead of POIs
+ *  like airports, hotels, or shops. */
 export const searchAddresses = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ q: z.string().trim().min(3).max(160) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ q: z.string().trim().min(2).max(160) }).parse(d))
   .handler(async ({ data }) => {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=1&q=${encodeURIComponent(data.q)}`;
+      // layer=address restricts to admin/settlement hits and drops POIs.
+      const url =
+        `https://nominatim.openstreetmap.org/search?format=json&limit=8` +
+        `&addressdetails=1&layer=address&dedupe=1` +
+        `&q=${encodeURIComponent(data.q)}`;
       const res = await fetch(url, {
         headers: { "User-Agent": "GlobalChain/1.0", "Accept-Language": "en" },
       });
       if (!res.ok) return [];
       const arr = (await res.json()) as Array<{
         place_id: number; lat: string; lon: string; display_name: string;
-        address?: { city?: string; town?: string; village?: string; country?: string };
+        class?: string; type?: string;
+        address?: {
+          city?: string; town?: string; village?: string; hamlet?: string;
+          municipality?: string; suburb?: string; county?: string;
+          state?: string; country?: string;
+        };
       }>;
-      return arr.map((h) => ({
-        id: String(h.place_id),
-        label: h.display_name,
-        lat: parseFloat(h.lat),
-        lng: parseFloat(h.lon),
-        city: h.address?.city || h.address?.town || h.address?.village || "",
-        country: h.address?.country || "",
-      }));
+
+      // Whitelist real places; drop airports, aeroways, amenities, tourism, shops, etc.
+      const allowedClass = new Set(["place", "boundary", "landuse"]);
+      const cleaned = arr
+        .filter((h) => {
+          const a = h.address ?? {};
+          const hasSettlement =
+            a.city || a.town || a.village || a.hamlet || a.municipality || a.suburb;
+          const goodClass = h.class ? allowedClass.has(h.class) : true;
+          return hasSettlement && goodClass;
+        })
+        .map((h) => {
+          const a = h.address ?? {};
+          const city =
+            a.city || a.town || a.village || a.hamlet || a.municipality || a.suburb || "";
+          const region = a.county || a.state || "";
+          const country = a.country || "";
+          const label = [city, region, country].filter(Boolean).join(", ") || h.display_name;
+          return {
+            id: String(h.place_id),
+            label,
+            lat: parseFloat(h.lat),
+            lng: parseFloat(h.lon),
+            city,
+            country,
+          };
+        });
+      return cleaned.slice(0, 6);
     } catch {
       return [];
     }
