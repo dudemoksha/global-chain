@@ -2,6 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
+import { PASSWORD_RULE, validatePassword } from "@/lib/password";
+
 
 export const Route = createFileRoute("/register")({
   head: () => ({
