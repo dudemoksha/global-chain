@@ -3,9 +3,9 @@ import { Mark } from "@/components/site/mark";
 import { AlertBell } from "@/components/site/alert-bell";
 import { supabase } from "@/integrations/supabase/client";
 
-type NavItem = { to: string; label: string; adminOnly?: boolean };
+type NavItem = { to: string; label: string };
 
-const NAV: NavItem[] = [
+const USER_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/suppliers", label: "Suppliers" },
   { to: "/factories", label: "Factories" },
@@ -13,11 +13,16 @@ const NAV: NavItem[] = [
   { to: "/globe", label: "Globe" },
   { to: "/signals", label: "Signals" },
   { to: "/simulation", label: "Simulation" },
-  { to: "/analytics", label: "Analytics" },
   { to: "/uploads", label: "Uploads" },
   { to: "/assistant", label: "Assistant" },
-  { to: "/alerts", label: "Alerts" },
-  { to: "/admin/companies", label: "Admin", adminOnly: true },
+];
+
+const ADMIN_NAV: NavItem[] = [
+  { to: "/dashboard", label: "Dashboard" },
+  { to: "/admin/requests", label: "Requests" },
+  { to: "/admin/companies", label: "Companies" },
+  { to: "/admin/audit", label: "Audit" },
+  { to: "/analytics", label: "Analytics" },
 ];
 
 export function AppShell({
@@ -36,14 +41,19 @@ export function AppShell({
     router.navigate({ to: "/", replace: true });
   }
 
-  const items = NAV.filter((n) => !n.adminOnly || isAdmin);
+  const items = isAdmin ? ADMIN_NAV : USER_NAV;
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-[1240px] items-center justify-between gap-6 px-6">
-          <Link to="/dashboard" className="shrink-0">
+          <Link to="/dashboard" className="flex shrink-0 items-center gap-2">
             <Mark />
+            {isAdmin && (
+              <span className="mono-label !text-primary hidden sm:inline">
+                · Admin
+              </span>
+            )}
           </Link>
           <nav className="hidden flex-1 items-center gap-5 md:flex">
             {items.map((n) => (
@@ -58,7 +68,7 @@ export function AppShell({
             ))}
           </nav>
           <div className="flex items-center gap-3">
-            <AlertBell />
+            {!isAdmin && <AlertBell />}
             <span className="mono-label hidden lg:inline">{email}</span>
             <button
               type="button"
