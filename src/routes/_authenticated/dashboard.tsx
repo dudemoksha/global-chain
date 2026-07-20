@@ -706,7 +706,7 @@ function AdminDashboard() {
         )}
         {tab === "approvals" && <AdminApprovals profiles={profiles} />}
         {tab === "users" && <AdminUsers users={users} />}
-        {tab === "activity" && <AdminActivity profiles={profiles} />}
+        {tab === "activity" && <AdminActivity profiles={profiles} users={users} />}
       </div>
     </>
   );
@@ -1556,65 +1556,292 @@ function PasswordModal({
 }
 
 
-function AdminActivity({ profiles }: { profiles: any[] }) {
+function AdminActivity({
+  profiles,
+  users,
+}: {
+  profiles: any[];
+  users: any[];
+}) {
+  const [selected, setSelected] = useState<any | null>(null);
+  const [query, setQuery] = useState("");
+
   const recent = [...profiles]
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     .slice(0, 15);
 
+  const filteredUsers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = [...users].sort((a, b) =>
+      (a.full_name || a.work_email || "").localeCompare(
+        b.full_name || b.work_email || "",
+      ),
+    );
+    if (!q) return list;
+    return list.filter((u) =>
+      `${u.full_name ?? ""} ${u.work_email ?? ""} ${u.legal_name ?? ""}`
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [users, query]);
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-      <div className="rounded-md border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div className="mono-label">Latest registrations</div>
+    <>
+      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <div className="rounded-md border border-border bg-card">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-6 py-4">
+            <div className="mono-label">Users · click for activity</div>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search user…"
+              className="h-8 w-48 rounded-md border border-border bg-background px-2 text-[12.5px] outline-none focus:border-primary"
+            />
+          </div>
+          {filteredUsers.length === 0 ? (
+            <div className="p-8 text-center text-[13px] text-muted-foreground">
+              No users found.
+            </div>
+          ) : (
+            <ul className="max-h-[540px] divide-y divide-border overflow-y-auto">
+              {filteredUsers.map((u) => (
+                <li key={u.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(u)}
+                    className="flex w-full items-center justify-between gap-3 px-6 py-3 text-left text-[13px] hover:bg-surface"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        {u.full_name || u.work_email}
+                      </div>
+                      <div className="truncate text-[12px] text-muted-foreground">
+                        {u.work_email} · {u.legal_name || "—"}
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${
+                        u.is_admin
+                          ? "bg-primary/10 text-primary"
+                          : "bg-surface text-foreground"
+                      }`}
+                    >
+                      {u.is_admin ? "Admin" : "User"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        <ul className="divide-y divide-border">
-          {recent.map((p) => {
-            const status = p.is_approved
-              ? "Approved"
-              : p.reviewed_at
-                ? "Rejected"
-                : "Pending";
-            return (
-              <li
-                key={p.id}
-                className="flex items-center justify-between px-6 py-3 text-[13px]"
-              >
-                <div className="min-w-0">
-                  <div className="truncate font-medium">
-                    {p.legal_name || "—"}
-                  </div>
-                  <div className="truncate text-[12px] text-muted-foreground">
-                    {new Date(p.created_at).toLocaleString()} · {p.work_email}
-                  </div>
-                </div>
-                <StatusPill status={status} />
+        <div className="space-y-6">
+          <div className="rounded-md border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <div className="mono-label">Latest registrations</div>
+            </div>
+            <ul className="divide-y divide-border">
+              {recent.map((p) => {
+                const status = p.is_approved
+                  ? "Approved"
+                  : p.reviewed_at
+                    ? "Rejected"
+                    : "Pending";
+                return (
+                  <li
+                    key={p.id}
+                    className="flex items-center justify-between px-6 py-3 text-[13px]"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        {p.legal_name || "—"}
+                      </div>
+                      <div className="truncate text-[12px] text-muted-foreground">
+                        {new Date(p.created_at).toLocaleString()} ·{" "}
+                        {p.work_email}
+                      </div>
+                    </div>
+                    <StatusPill status={status} />
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="rounded-md border border-border bg-card p-6">
+            <div className="mono-label">Health</div>
+            <ul className="mt-4 space-y-3 text-[13px]">
+              <li className="flex items-center justify-between">
+                <span className="text-muted-foreground">Auth service</span>
+                <StatusPill status="Active" />
               </li>
-            );
-          })}
-        </ul>
+              <li className="flex items-center justify-between">
+                <span className="text-muted-foreground">Signal ingestion</span>
+                <StatusPill status="Active" />
+              </li>
+              <li className="flex items-center justify-between">
+                <span className="text-muted-foreground">Graph resolver</span>
+                <StatusPill status="Active" />
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
 
-      <div className="rounded-md border border-border bg-card p-6">
-        <div className="mono-label">Health</div>
-        <ul className="mt-4 space-y-3 text-[13px]">
-          <li className="flex items-center justify-between">
-            <span className="text-muted-foreground">Auth service</span>
-            <StatusPill status="Active" />
-          </li>
-          <li className="flex items-center justify-between">
-            <span className="text-muted-foreground">Signal ingestion</span>
-            <StatusPill status="Active" />
-          </li>
-          <li className="flex items-center justify-between">
-            <span className="text-muted-foreground">Graph resolver</span>
-            <StatusPill status="Active" />
-          </li>
-        </ul>
+      {selected && (
+        <UserActivityModal
+          user={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function UserActivityModal({
+  user,
+  onClose,
+}: {
+  user: any;
+  onClose: () => void;
+}) {
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["admin", "activity", user.id],
+    queryFn: () => adminGetUserActivity({ data: { userId: user.id } }),
+    refetchInterval: 10000,
+  });
+
+  const rows = data ?? [];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-md border border-border bg-card shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+          <div className="min-w-0">
+            <div className="mono-label">Activity · live</div>
+            <div className="mt-1 truncate font-display text-[18px] font-medium">
+              {user.full_name || user.work_email}
+            </div>
+            <div className="truncate text-[12px] text-muted-foreground">
+              {user.work_email} · {user.legal_name || "—"}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="h-8 rounded-md border border-border px-3 text-[12px] font-medium hover:bg-surface"
+            >
+              {isFetching ? "…" : "Refresh"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 rounded-md border border-border px-3 text-[12px] font-medium hover:bg-surface"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto">
+          {isLoading ? (
+            <div className="p-10 text-center text-[13px] text-muted-foreground">
+              Loading activity…
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="p-10 text-center text-[13px] text-muted-foreground">
+              No activity recorded yet for this user.
+            </div>
+          ) : (
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="px-6 py-3 font-medium">When</th>
+                  <th className="px-6 py-3 font-medium">Event</th>
+                  <th className="px-6 py-3 font-medium">Device</th>
+                  <th className="px-6 py-3 font-medium">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r: any) => {
+                  const d = new Date(r.created_at);
+                  const meta = (r.meta ?? {}) as Record<string, any>;
+                  return (
+                    <tr
+                      key={r.id}
+                      className="border-b border-border align-top"
+                    >
+                      <td className="px-6 py-3 whitespace-nowrap">
+                        <div>{d.toLocaleDateString()}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {d.toLocaleTimeString()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3">
+                        <ActionPill action={r.action} />
+                      </td>
+                      <td className="px-6 py-3">
+                        <div>{meta.device || "—"}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {meta.platform || ""}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-[11.5px] text-muted-foreground">
+                        {meta.timezone && (
+                          <div>TZ: {meta.timezone}</div>
+                        )}
+                        {meta.language && <div>Lang: {meta.language}</div>}
+                        {meta.screen && <div>Screen: {meta.screen}</div>}
+                        {meta.user_agent && (
+                          <div className="mt-1 line-clamp-2 break-all">
+                            {meta.user_agent}
+                          </div>
+                        )}
+                        {!meta.user_agent && r.target_type !== "session" && (
+                          <div>Target: {r.target_type}</div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+function ActionPill({ action }: { action: string }) {
+  const isLogin = action === "auth.login";
+  const isLogout = action === "auth.logout";
+  const cls = isLogin
+    ? "bg-primary/10 text-primary"
+    : isLogout
+      ? "bg-surface text-foreground"
+      : "bg-accent text-foreground";
+  const label = isLogin
+    ? "Login"
+    : isLogout
+      ? "Logout"
+      : action.replace(/^user\./, "").replace(/^company\./, "");
+  return (
+    <span
+      className={`rounded-sm px-2 py-0.5 text-[11px] font-medium ${cls}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 
 /* ═══════════════════════════ Shared UI ═══════════════════════════ */
 
