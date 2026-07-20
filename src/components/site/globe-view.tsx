@@ -111,12 +111,6 @@ export default function GlobeView({
   );
 }
 
-// Grab the same THREE instance react-globe.gl bundles with, so materials
-// registered against it render correctly.
-function globalThisThree(): typeof import("three") {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("three");
-}
 
 function escapeHtml(s: string): string {
   return s
