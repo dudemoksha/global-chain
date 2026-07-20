@@ -39,7 +39,8 @@ export const addSupplier = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    const { data: orgId, error: rpcErr } = await supabase.rpc(
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: orgId, error: rpcErr } = await supabaseAdmin.rpc(
       "upsert_organization",
       {
         _name: data.legal_name,
@@ -49,6 +50,7 @@ export const addSupplier = createServerFn({ method: "POST" })
     );
     if (rpcErr) throw rpcErr;
     if (!orgId) throw new Error("Failed to resolve organisation");
+
 
     const { data: row, error } = await supabase
       .from("suppliers")
