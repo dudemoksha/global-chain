@@ -223,6 +223,7 @@ export const respondTradeRequest = createServerFn({ method: "POST" })
             category: req.category || "",
             criticality: "medium",
             annual_spend_bucket: "",
+            product: req.product || "",
             notes: req.product
               ? `Auto-linked via trade request: ${req.product}${req.quantity ? ` × ${req.quantity}` : ""}`
               : "Auto-linked via accepted trade request",
