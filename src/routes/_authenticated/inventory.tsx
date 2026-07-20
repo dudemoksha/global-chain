@@ -192,7 +192,7 @@ function InventoryForm({
             {busy ? "Saving…" : "Save"}
           </button>
         </div>
-        <style>{`.fld{width:100%;border:1px solid hsl(var(--border));border-radius:6px;padding:8px 10px;font-size:13.5px;background:transparent}`}</style>
+        <style>{`.fld{width:100%;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13.5px;background:transparent}.fld:focus{outline:none;border-color:var(--border-strong)}`}</style>
       </form>
     </div>
   );
