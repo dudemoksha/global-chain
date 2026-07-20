@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
+import { getLiveEvents } from "@/lib/live-signals.functions";
 import {
   generateSignals,
   severityColor,
@@ -11,6 +12,7 @@ import {
   type SignalKind,
   type Severity,
 } from "@/lib/risk-signals";
+
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const suppliersQuery = queryOptions({
