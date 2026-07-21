@@ -7,22 +7,18 @@ const ADMIN_EMAIL = "nmokshasai7@gmail.com";
 const ADMIN_PASSWORD = "111111";
 const TIMEOUT = 45000;
 
-async function typeReactInput(driver, id, text) {
-  let success = false;
-  let attempts = 0;
-  while (!success && attempts < 5) {
-    const el = await driver.wait(until.elementLocated(By.id(id)), TIMEOUT);
-    await el.clear();
-    await el.sendKeys(text);
-    await driver.sleep(500);
-    const val = await el.getAttribute("value");
-    if (val === text) {
-      success = true;
-    } else {
-      attempts++;
-      console.log(`React hydration wiped input ${id}, retrying...`);
-    }
-  }
+async function setReactInput(driver, id, text) {
+  // Use JavaScript to set value AND fire the native input event
+  // This triggers React's synthetic event system directly, so React state is updated
+  // and cannot be wiped out by subsequent hydration
+  await driver.executeScript(`
+    const el = document.getElementById(arguments[0]);
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeInputValueSetter.call(el, arguments[1]);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  `, id, text);
+  await driver.sleep(300);
 }
 
 describe("Global-Chain Login E2E Tests", function () {
@@ -67,15 +63,25 @@ describe("Global-Chain Login E2E Tests", function () {
     assert.ok(await emailInput.isDisplayed(), "Email input should be visible");
     assert.ok(await passwordInput.isDisplayed(), "Password input should be visible");
     assert.ok(await loginButton.isDisplayed(), "Login button should be visible");
+    
+    // Wait for Vite to compile client JS and React to fully hydrate
+    // This prevents React from overwriting inputs in subsequent tests
+    await driver.sleep(10000);
   });
 
   it("02 — Login fails with wrong credentials and shows error", async function () {
     await driver.get(`${BASE_URL}/login`);
-    // Wait for React hydration on slow CI runners
-    await driver.sleep(2000);
-    
-    await typeReactInput(driver, "email", "wrong@example.com");
-    await typeReactInput(driver, "password", "wrongpassword");
+    // Wait for React to fully hydrate
+    await driver.wait(until.elementLocated(By.id("email")), TIMEOUT);
+    await driver.sleep(3000);
+
+    await setReactInput(driver, "email", "wrong@example.com");
+    await setReactInput(driver, "password", "wrongpassword");
+
+    // Verify values stuck before submitting
+    const emailVal = await driver.executeScript(`return document.getElementById('email').value`);
+    const passVal = await driver.executeScript(`return document.getElementById('password').value`);
+    console.log(`Before submit — email: "${emailVal}", password: "${passVal}"`);
 
     const loginButton = await driver.findElement(By.id("login-button"));
     await loginButton.click();
@@ -108,9 +114,11 @@ describe("Global-Chain Login E2E Tests", function () {
 
   it("03 — Admin login succeeds and redirects to dashboard", async function () {
     await driver.get(`${BASE_URL}/login`);
+    await driver.wait(until.elementLocated(By.id("email")), TIMEOUT);
+    await driver.sleep(2000);
     
-    await typeReactInput(driver, "email", ADMIN_EMAIL);
-    await typeReactInput(driver, "password", ADMIN_PASSWORD);
+    await setReactInput(driver, "email", ADMIN_EMAIL);
+    await setReactInput(driver, "password", ADMIN_PASSWORD);
 
     const loginButton = await driver.findElement(By.id("login-button"));
     await loginButton.click();
