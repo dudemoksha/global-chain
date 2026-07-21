@@ -1,0 +1,32 @@
+{
+  "name": "globalchain-e2e-full",
+  "version": "1.0.0",
+  "description": "Global-Chain full E2E test suite with Excel reporting",
+  "type": "commonjs",
+  "scripts": {
+    "test": "mocha 'tests/**/*.test.js' --timeout 90000 --exit --reporter spec",
+    "test:login": "mocha tests/01-login.test.js --timeout 90000 --exit",
+    "test:register": "mocha tests/02-register.test.js --timeout 90000 --exit",
+    "test:dashboard": "mocha tests/03-dashboard.test.js --timeout 90000 --exit",
+    "test:suppliers": "mocha tests/04-suppliers.test.js --timeout 90000 --exit",
+    "test:customers": "mocha tests/05-customers.test.js --timeout 90000 --exit",
+    "test:inventory": "mocha tests/06-inventory.test.js --timeout 90000 --exit",
+    "test:requests": "mocha tests/07-requests.test.js --timeout 90000 --exit",
+    "test:simulation": "mocha tests/08-simulation.test.js --timeout 90000 --exit",
+    "test:assistant": "mocha tests/09-assistant.test.js --timeout 90000 --exit",
+    "test:navigation": "mocha tests/10-navigation.test.js --timeout 90000 --exit",
+    "test:alerts": "mocha tests/11-alerts.test.js --timeout 90000 --exit",
+    "test:admin": "mocha tests/12-admin.test.js --timeout 90000 --exit",
+    "report": "node helpers/generate-report.js",
+    "run:all": "mocha 'tests/**/*.test.js' --timeout 90000 --exit --reporter spec; node helpers/generate-report.js"
+  },
+  "dependencies": {
+    "chromedriver": "^150.0.0",
+    "exceljs": "^4.4.0",
+    "mocha": "^11.0.0",
+    "selenium-webdriver": "^4.27.0"
+  },
+  "allowScripts": {
+    "chromedriver@150.0.4": true
+  }
+}
