@@ -51,21 +51,29 @@ jobs:
 
       - name: Install Selenium test dependencies
         run: |
-          cd selenium-tests
+          cd e2e-tests
           npm install
 
-      - name: Run Selenium E2E login tests
+      - name: Run Selenium E2E tests
         run: |
-          cd selenium-tests
-          npm run login
+          cd e2e-tests
+          npm run run:all
         env:
           TEST_URL: "http://localhost:8080"
           DISPLAY: ":99"
+
+      - name: Upload Excel Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: E2E-Excel-Report
+          path: e2e-tests/reports/*.xlsx
+          retention-days: 14
 
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: selenium-failure-logs
-          path: selenium-tests/logs/
+          path: e2e-tests/reports/
           retention-days: 7

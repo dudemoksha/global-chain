@@ -18,7 +18,7 @@
     "test:alerts": "mocha tests/11-alerts.test.js --timeout 90000 --exit",
     "test:admin": "mocha tests/12-admin.test.js --timeout 90000 --exit",
     "report": "node helpers/generate-report.js",
-    "run:all": "mocha 'tests/**/*.test.js' --timeout 90000 --exit --reporter spec; node helpers/generate-report.js"
+    "run:all": "node helpers/run-tests.js"
   },
   "dependencies": {
     "chromedriver": "^150.0.0",
