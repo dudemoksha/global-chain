@@ -13,6 +13,11 @@ import { AppShell } from "@/components/site/app-shell";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyProfile, listAllProfiles, decideProfile } from "@/lib/profile.functions";
+import {
+  listPasswordResetRequests,
+  approvePasswordResetRequest,
+  rejectPasswordResetRequest,
+} from "@/lib/password-resets.functions";
 import { getMySupplyGraph, listMySuppliers } from "@/lib/suppliers.functions";
 import { listInventory } from "@/lib/inventory.functions";
 import { listFactories } from "@/lib/factories.functions";
@@ -794,7 +799,7 @@ function UserBuying({
 
 /* ═══════════════════════════ ADMIN DASHBOARD ═══════════════════════════ */
 
-type AdminTab = "overview" | "approvals" | "users" | "activity";
+type AdminTab = "overview" | "approvals" | "users" | "activity" | "resets";
 
 function AdminDashboard() {
   const [tab, setTab] = useState<AdminTab>("overview");
@@ -802,13 +807,22 @@ function AdminDashboard() {
   const { data: profiles } = useSuspenseQuery(adminProfilesQuery);
   const { data: users } = useSuspenseQuery(adminUsersQuery);
 
+  const listResetRequestsFn = useServerFn(listPasswordResetRequests);
+
+  const { data: resets, refetch: refetchResets } = useQuery({
+    queryKey: ["admin", "resets"],
+    queryFn: async () => listResetRequestsFn(),
+  });
+
   const pending = profiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
   const approved = profiles.filter((p) => p.is_approved).length;
   const rejected = profiles.filter((p) => !p.is_approved && p.reviewed_at).length;
+  const pendingResets = (resets || []).filter((r: any) => r.status === "pending").length;
 
   const ADMIN_TABS: { id: AdminTab; label: string; badge?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "approvals", label: "Approvals", badge: pending || undefined },
+    { id: "resets", label: "Password Resets", badge: pendingResets || undefined },
     { id: "users", label: "Users" },
     { id: "activity", label: "Activity" },
   ];
@@ -860,6 +874,7 @@ function AdminDashboard() {
           />
         )}
         {tab === "approvals" && <AdminApprovals profiles={profiles} />}
+        {tab === "resets" && <AdminResets resets={resets || []} onResolve={refetchResets} />}
         {tab === "users" && <AdminUsers users={users} />}
         {tab === "activity" && <AdminActivity profiles={profiles} users={users} />}
       </div>
@@ -1086,6 +1101,126 @@ function AdminApprovals({ profiles }: { profiles: any[] }) {
                       Reject
                     </button>
                   </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/* ── Admin tab: Password Resets ── */
+
+function AdminResets({ resets, onResolve }: { resets: any[]; onResolve: () => void }) {
+  const approveFn = useServerFn(approvePasswordResetRequest);
+  const rejectFn = useServerFn(rejectPasswordResetRequest);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const handleApprove = async (requestId: string) => {
+    const tempPassword = window.prompt("Enter a temporary password for this user (min 6 characters):");
+    if (!tempPassword) return;
+    if (tempPassword.trim().length < 6) {
+      window.alert("Password must be at least 6 characters.");
+      return;
+    }
+
+    setBusyId(requestId);
+    try {
+      await approveFn({ data: { requestId, tempPassword: tempPassword.trim() } });
+      window.alert(`Approved! User can now log in using temporary password: ${tempPassword}`);
+      onResolve();
+    } catch (e: any) {
+      window.alert(e.message || "Failed to approve password reset.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    if (!window.confirm("Are you sure you want to reject this password reset request?")) return;
+    setBusyId(requestId);
+    try {
+      await rejectFn({ data: { requestId } });
+      onResolve();
+    } catch (e: any) {
+      window.alert(e.message || "Failed to reject request.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div>
+          <div className="mono-label">Password Reset Requests</div>
+          <div className="mt-1 text-[13px] text-muted-foreground">
+            Manage user password reset requests and set temporary passwords.
+          </div>
+        </div>
+      </div>
+
+      {resets.length === 0 ? (
+        <div className="p-10 text-center text-[13px] text-muted-foreground">
+          No password reset requests found.
+        </div>
+      ) : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border text-left text-muted-foreground">
+              <th className="px-6 py-3 font-medium">User Email</th>
+              <th className="px-6 py-3 font-medium">Status</th>
+              <th className="px-6 py-3 font-medium">Temp Password</th>
+              <th className="px-6 py-3 font-medium">Requested At</th>
+              <th className="px-6 py-3 font-medium text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resets.map((r) => (
+              <tr key={r.id} className="border-b border-border">
+                <td className="px-6 py-3 font-medium">{r.email}</td>
+                <td className="px-6 py-3">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${
+                      r.status === "approved"
+                        ? "bg-green-500/10 text-green-500"
+                        : r.status === "rejected"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-yellow-500/10 text-yellow-500"
+                    }`}
+                  >
+                    {r.status}
+                  </span>
+                </td>
+                <td className="px-6 py-3 text-muted-foreground font-mono">
+                  {r.temp_password || "—"}
+                </td>
+                <td className="px-6 py-3 text-muted-foreground">
+                  {new Date(r.created_at).toLocaleString()}
+                </td>
+                <td className="px-6 py-3 text-right">
+                  {r.status === "pending" && (
+                    <div className="inline-flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === r.id}
+                        onClick={() => handleApprove(r.id)}
+                        className="rounded-md bg-foreground px-3 py-1.5 text-[12px] font-medium text-background disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === r.id}
+                        onClick={() => handleReject(r.id)}
+                        className="rounded-md border border-border px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

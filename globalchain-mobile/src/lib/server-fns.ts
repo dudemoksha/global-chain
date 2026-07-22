@@ -26,6 +26,10 @@ export const SERVER_FN_HASHES = {
   registerUser: '47ca9349fd6aefbcec5cf48293d884aef31ebab48cb67d61e3bc4c8c3b7321f0',
   searchOrganizations: 'fba221fe137e8fc4a987237ba7c871660765fbb174aab8bc4b61a98f3a8b89cc',
   recommendAlternatives: '7954a530c1aabf88ff780a1a3aa9b803f6e6f628375ebf04464cd5b63cc02543',
+  requestPasswordReset: '84868fbbca6328aa5d928baae22c77b1b1342d4bb427ba1a0332c810d5a9872e',
+  listPasswordResetRequests: '592cf381a5308833f79b018ae3c32cc2965131525b7524fb2659a64b44e9b51f',
+  approvePasswordResetRequest: '5edc8a68ed35d3c7d0f4efdf5c754cda8ac78c601ab0a5b33e7588911aafdbec',
+  rejectPasswordResetRequest: '2631d60a26df60bd92568d5409d5054ffc9856fc043bcbbad76b065d9821e0d9',
 };
 
 function serializeToSeroval(value: any): any {
@@ -300,4 +304,20 @@ export const recommendAlternatives = async (data: {
   limit?: number;
 }) => {
   return callServerFn(SERVER_FN_HASHES.recommendAlternatives, data);
+};
+
+export const requestPasswordReset = async (data: { email: string }) => {
+  return callServerFn(SERVER_FN_HASHES.requestPasswordReset, data);
+};
+
+export const listPasswordResetRequests = async () => {
+  return callServerFn(SERVER_FN_HASHES.listPasswordResetRequests, {}, 'GET');
+};
+
+export const approvePasswordResetRequest = async (data: { requestId: string; tempPassword: string }) => {
+  return callServerFn(SERVER_FN_HASHES.approvePasswordResetRequest, data);
+};
+
+export const rejectPasswordResetRequest = async (data: { requestId: string }) => {
+  return callServerFn(SERVER_FN_HASHES.rejectPasswordResetRequest, data);
 };

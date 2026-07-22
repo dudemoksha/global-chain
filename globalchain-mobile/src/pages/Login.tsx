@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { Eye, EyeOff } from 'lucide-react';
+import { requestPasswordReset } from '../lib/server-fns';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +11,13 @@ export const Login: React.FC = () => {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Forgot Password state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetErr, setResetErr] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +35,20 @@ export const Login: React.FC = () => {
       setErr(e.message || 'An error occurred during sign in.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetErr(null);
+    setResetBusy(true);
+    try {
+      await requestPasswordReset({ email: resetEmail });
+      setResetSuccess(true);
+    } catch (err: any) {
+      setResetErr(err.message || 'Failed to request password reset.');
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -89,6 +111,16 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowResetModal(true)}
+              className="text-[12px] text-muted-foreground hover:text-foreground font-medium underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+
           {err && (
             <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
               {err}
@@ -118,8 +150,80 @@ export const Login: React.FC = () => {
         </div>
       </div>
 
+      {/* Forgot Password Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 shadow-lg">
+            <h2 className="font-display text-[20px] font-medium tracking-tight">Forgot Password</h2>
+            <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+              Enter your work email address. We will submit a password reset request to the administrators.
+            </p>
+
+            {resetSuccess ? (
+              <div className="mt-4 rounded-md border border-green-500/20 bg-green-500/5 p-4 text-[13px] text-foreground">
+                <p className="font-semibold text-green-500">✔ Request submitted</p>
+                <p className="mt-1 text-muted-foreground leading-relaxed">
+                  Your request was sent. Once approved, the admin will set a temporary password for you to sign in.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetModal(false);
+                    setResetSuccess(false);
+                    setResetEmail('');
+                  }}
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-foreground py-2 text-[13.5px] font-medium text-background hover:opacity-90"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetSubmit} className="mt-4 space-y-4">
+                <div>
+                  <div className="mono-label mb-1.5">Work email</div>
+                  <input
+                    type="email"
+                    required
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="operator@acme.co"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-[14px] text-foreground outline-none focus:border-foreground transition-colors"
+                  />
+                </div>
+
+                {resetErr && (
+                  <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                    {resetErr}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowResetModal(false);
+                      setResetErr(null);
+                    }}
+                    className="flex-1 rounded-md border border-border py-2 text-[13px] font-medium text-foreground hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resetBusy}
+                    className="flex-1 rounded-md bg-foreground py-2 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-60"
+                  >
+                    {resetBusy ? 'Submitting...' : 'Submit'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Footer Info */}
-      <div className="text-center pt-8 border-t border-border flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="text-center pt-8 border-t border-border flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
         <span>Secure channel · TLS 1.3</span>
         <span>Mobile App v1.0</span>
       </div>

@@ -1,8 +1,10 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
+import { requestPasswordReset } from "@/lib/password-resets.functions";
 
 const searchSchema = z.object({
   redirect: z.string().optional(),
@@ -28,6 +30,29 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Forgot Password modal states
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetErr, setResetErr] = useState<string | null>(null);
+
+  const requestResetFn = useServerFn(requestPasswordReset);
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetErr(null);
+    setResetBusy(true);
+    try {
+      await requestResetFn({ data: { email: resetEmail } });
+      setResetSuccess(true);
+    } catch (err: any) {
+      setResetErr(err.message || "Failed to request password reset.");
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   // If already signed in, forward.
   useEffect(() => {
@@ -116,6 +141,16 @@ function LoginPage() {
               onChange={setPassword}
             />
 
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(true)}
+                className="text-[12px] text-muted-foreground hover:text-foreground font-medium underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+
             {err && (
               <div id="login-error" className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
                 {err}
@@ -147,6 +182,75 @@ function LoginPage() {
           </div>
         </div>
       </main>
+
+      {/* Forgot Password Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-lg animate-rise">
+            <h2 className="font-display text-[22px] font-medium tracking-tight">Forgot Password</h2>
+            <p className="mt-2 text-[13px] text-muted-foreground">
+              Enter your work email address. We will submit a password reset request to the administrators.
+            </p>
+
+            {resetSuccess ? (
+              <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-4 text-[13px] text-foreground">
+                <p className="font-semibold text-primary">✔ Reset requested successfully</p>
+                <p className="mt-1.5 text-muted-foreground">
+                  Your request has been submitted to the admin panel. Once approved, the admin will set a temporary password for you to log in.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetModal(false);
+                    setResetSuccess(false);
+                    setResetEmail("");
+                  }}
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetSubmit} className="mt-4 space-y-4">
+                <Field
+                  label="Work email"
+                  type="email"
+                  required
+                  value={resetEmail}
+                  onChange={setResetEmail}
+                  placeholder="operator@acme.co"
+                />
+
+                {resetErr && (
+                  <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+                    {resetErr}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowResetModal(false);
+                      setResetErr(null);
+                    }}
+                    className="flex-1 rounded-md border border-border px-4 py-2 text-[13px] font-medium text-foreground hover:bg-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resetBusy}
+                    className="flex-1 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-60"
+                  >
+                    {resetBusy ? "Submitting..." : "Submit"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

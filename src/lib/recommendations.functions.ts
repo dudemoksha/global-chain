@@ -84,6 +84,15 @@ export const recommendAlternatives = createServerFn({ method: "POST" })
       if (!o) continue;
       if (ownSet.has(o.id)) continue;
       if (data.exclude_org_id && o.id === data.exclude_org_id) continue;
+
+      // Exclude by name comparison
+      if (myProfile?.legal_name) {
+        const myNameNorm = myProfile.legal_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const otherNameNorm = o.display_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (myNameNorm === otherNameNorm || o.display_name.toLowerCase().includes(myProfile.legal_name.toLowerCase())) {
+          continue;
+        }
+      }
       let agg = byOrg.get(o.id);
       if (!agg) {
         agg = {

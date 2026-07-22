@@ -1,4 +1,4 @@
-﻿-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ ROLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ ROLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 create type public.app_role as enum ('admin', 'operator');
 
 create table public.user_roles (
@@ -765,6 +765,59 @@ $$;
 
 REVOKE ALL ON FUNCTION public.list_org_products(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.list_org_products(uuid) TO authenticated;
+
+
+-- ============ chat messages ============
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  receiver_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  message text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS chat_messages_conversation_idx 
+ON public.chat_messages(sender_id, receiver_id, created_at DESC);
+
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read their own conversations" ON public.chat_messages
+  FOR SELECT TO authenticated USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
+CREATE POLICY "Users can send messages as sender" ON public.chat_messages
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = sender_id);
+
+CREATE POLICY "Users can view other profiles" ON public.profiles
+  FOR SELECT TO authenticated USING (true);
+
+
+-- ============ password reset requests ============
+CREATE TABLE IF NOT EXISTS public.password_reset_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  temp_password text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  resolved_at timestamptz
+);
+
+ALTER TABLE public.password_reset_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can request password resets" ON public.password_reset_requests
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Admins can manage reset requests" ON public.password_reset_requests
+  FOR ALL TO authenticated USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE profiles.id = auth.uid() AND profiles.tier_role = 'admin'
+    )
+  );
+
+GRANT ALL ON public.password_reset_requests TO authenticated;
+GRANT ALL ON public.password_reset_requests TO anon;
+GRANT ALL ON public.password_reset_requests TO service_role;
+
 
 
 
