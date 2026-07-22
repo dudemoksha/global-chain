@@ -470,51 +470,94 @@ function SimBody() {
 
               <div className="space-y-4">
                 {result.impacted.length > 0 ? (
-                  result.impacted.map((o) => (
-                    <div key={o.id} className="space-y-3">
-                      {/* Impacted item — red box */}
-                      <div className="rounded-md border-2 border-destructive/40 bg-destructive/10 p-4">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <div>
-                            <div className="mono-label !text-destructive">
-                              Impacted inbound
-                            </div>
-                            <div className="mt-1 text-[14.5px] font-medium">
-                              {o.product || o.category || "Unspecified product"}
-                            </div>
-                            <div className="mono-label mt-0.5">
-                              from {o.orgName}
-                              {o.country ? ` · ${o.country}` : ""}
-                            </div>
-                          </div>
-                          <div className="rounded-sm border border-destructive/40 bg-background px-1.5 py-0.5 text-[11px] capitalize text-destructive">
-                            {o.criticality}
-                          </div>
-                        </div>
-                      </div>
+                  result.impacted.map((o) => {
+                    // Calculate dynamic metrics based on simulation inputs
+                    const baseLoss = o.criticality === "critical" ? 85000 : o.criticality === "high" ? 50000 : 25000;
+                    const sevMult = severity === "critical" ? 1.5 : severity === "high" ? 1.0 : 0.6;
+                    const lossEstimate = Math.round(baseLoss * sevMult);
 
-                      {/* Recommendations — green box */}
-                      <div className="rounded-md border-2 border-emerald-500/40 bg-emerald-500/10 p-4">
-                        <div className="mono-label !text-emerald-700">
-                          Recommended alternatives
+                    let recoveryTime = 30;
+                    if (selKinds.includes("geopolitical")) recoveryTime += 30;
+                    if (selKinds.includes("logistics")) recoveryTime += 15;
+                    if (severity === "critical") recoveryTime += 30;
+                    else if (severity === "high") recoveryTime += 15;
+
+                    const targetDate = new Date();
+                    targetDate.setDate(targetDate.getDate() + recoveryTime);
+                    const recoveryDateString = targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+                    return (
+                      <div key={o.id} className="space-y-3">
+                        {/* Impacted item — red box */}
+                        <div className="rounded-md border-2 border-destructive/40 bg-destructive/10 p-4">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <div>
+                              <div className="mono-label !text-destructive">
+                                Impacted inbound
+                              </div>
+                              <div className="mt-1 text-[14.5px] font-medium">
+                                {o.product || o.category || "Unspecified product"}
+                              </div>
+                              <div className="mono-label mt-0.5">
+                                from {o.orgName}
+                                {o.country ? ` · ${o.country}` : ""}
+                              </div>
+                            </div>
+                            <div className="rounded-sm border border-destructive/40 bg-background px-1.5 py-0.5 text-[11px] capitalize text-destructive">
+                              {o.criticality}
+                            </div>
+                          </div>
                         </div>
-                        <div className="mt-2">
-                          <RecommendationsPanel
-                            title=""
-                            subtitle={`Cross-operator matches${
-                              o.country ? `, avoiding ${o.country}` : ""
-                            }.`}
-                            industry={o.industry}
-                            category={o.product || o.category}
-                            avoidCountry={o.country}
-                            excludeOrgId={o.orgId}
-                            limit={5}
-                            compact
-                          />
+
+                        {/* Financial Loss & Recovery Card — amber box */}
+                        <div className="rounded-md border-2 border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                          <div className="mono-label !text-amber-700">Financial Loss & Recovery Projection</div>
+                          <div className="grid grid-cols-2 gap-4 text-[13px]">
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Disruption Lead Time</span>
+                              <span className="font-semibold text-foreground text-[14px]">{recoveryTime} Days</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Estimated Profit Loss</span>
+                              <span className="font-semibold text-destructive text-[14px]">${lossEstimate.toLocaleString()} USD</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Recovery Target Date</span>
+                              <span className="font-semibold text-foreground text-[14px]">{recoveryDateString}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Profit Recovery Horizon</span>
+                              <span className="font-semibold text-emerald-700 text-[14px]">{recoveryTime + 30} Days to Profit Reset</span>
+                            </div>
+                          </div>
+                          <p className="text-[12px] text-muted-foreground leading-relaxed pt-1.5 border-t border-border/20">
+                            ⚠️ Sourcing from <strong>{o.orgName}</strong> in <strong>{o.country}</strong> is simulated to halt. The estimated impact will reduce your margin on <strong>{o.product || o.category || "materials"}</strong> by <strong>${Math.round(lossEstimate * 0.05).toLocaleString()}</strong> daily until alternate vendor mapping is fully active.
+                          </p>
+                        </div>
+
+                        {/* Recommendations — green box */}
+                        <div className="rounded-md border-2 border-emerald-500/40 bg-emerald-500/10 p-4">
+                          <div className="mono-label !text-emerald-700">
+                            Recommended alternatives
+                          </div>
+                          <div className="mt-2">
+                            <RecommendationsPanel
+                              title=""
+                              subtitle={`Cross-operator matches${
+                                o.country ? `, avoiding ${o.country}` : ""
+                              }.`}
+                              industry={o.industry}
+                              category={o.product || o.category}
+                              avoidCountry={o.country}
+                              excludeOrgId={o.orgId}
+                              limit={5}
+                              compact
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-3">
                     <div className="mono-label !text-emerald-700">

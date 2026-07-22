@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
-import { Play, ShieldAlert, CheckCircle, Plus } from 'lucide-react';
+import { Play, ShieldAlert, CheckCircle, Plus, AlertTriangle, RefreshCw } from 'lucide-react';
 
 const KINDS = ['geopolitical', 'climate', 'logistics', 'cyber', 'regulatory'];
 const SEVERITIES = ['medium', 'high', 'critical'];
@@ -22,6 +22,12 @@ export const Simulation: React.FC = () => {
   // Simulation Results
   const [riskScore, setRiskScore] = useState(0);
   const [affectedNodes, setAffectedNodes] = useState<any[]>([]);
+  const [alternateOrgs, setAlternateOrgs] = useState<any[]>([]);
+
+  // Financial Loss & Recovery States
+  const [lossEstimate, setLossEstimate] = useState(0);
+  const [recoveryTime, setRecoveryTime] = useState(0);
+  const [recoveryDateString, setRecoveryDateString] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -96,21 +102,18 @@ export const Simulation: React.FC = () => {
     fetchConnections();
   }, [user]);
 
-  // Unique list of node countries combined with custom countries
+  // Unique list of countries combined with custom countries
   const countries = useMemo(() => {
     const set = new Set<string>();
     nodes.forEach((n) => {
       if (n.country) set.add(n.country);
     });
-    // Add default global countries
     const defaults = ['Japan', 'China', 'Germany', 'United States', 'Taiwan', 'India', 'South Korea'];
     defaults.forEach(c => set.add(c));
-    // Add custom countries
     customCountries.forEach(c => set.add(c));
     return Array.from(set).sort();
   }, [nodes, customCountries]);
 
-  // Auto-select first country if none selected
   useEffect(() => {
     if (countries.length > 0 && !selectedCountry) {
       setSelectedCountry(countries[0]);
@@ -135,7 +138,7 @@ export const Simulation: React.FC = () => {
       (n) => (n.country || '').toLowerCase() === selectedCountry.toLowerCase()
     );
 
-    // Calculate simulated risk score (0-100) based on severity and criticality weights
+    // Calculate simulated risk score (0-100)
     const critWeights: Record<string, number> = { critical: 40, high: 25, medium: 15, low: 5 };
     const sevWeights: Record<string, number> = { critical: 1.5, high: 1.0, medium: 0.6 };
 
@@ -149,6 +152,41 @@ export const Simulation: React.FC = () => {
     score = Math.min(100, Math.round(score));
     setRiskScore(score);
     setAffectedNodes(affected);
+
+    // Calculate dynamic financial loss & recovery metrics
+    let baseLoss = 25000;
+    if (affected.length > 0) {
+      const hasCritical = affected.some(n => n.criticality === 'critical');
+      const hasHigh = affected.some(n => n.criticality === 'high');
+      baseLoss = hasCritical ? 85000 : hasHigh ? 50000 : 35000;
+    }
+    const sevMult = selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6;
+    const calculatedLoss = Math.round(baseLoss * sevMult);
+    setLossEstimate(calculatedLoss);
+
+    let calculatedRecovery = 30;
+    if (selectedKind === 'geopolitical') calculatedRecovery += 30;
+    if (selectedKind === 'logistics') calculatedRecovery += 15;
+    if (selectedSeverity === 'critical') calculatedRecovery += 30;
+    else if (selectedSeverity === 'high') calculatedRecovery += 15;
+    setRecoveryTime(calculatedRecovery);
+
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + calculatedRecovery);
+    setRecoveryDateString(targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+
+    // Fetch alternative companies outside this country
+    try {
+      const { data: alts } = await supabase
+        .from('organizations')
+        .select('id, display_name, country, industry')
+        .not('country', 'eq', selectedCountry)
+        .limit(3);
+      setAlternateOrgs(alts || []);
+    } catch (e) {
+      console.error(e);
+    }
+
     setSimulated(true);
 
     // Write real alerts to Supabase alerts table so both website & app sync!
@@ -352,6 +390,36 @@ export const Simulation: React.FC = () => {
               </div>
             </div>
 
+            {/* Financial Loss & Recovery Projection Card */}
+            {affectedNodes.length > 0 && (
+              <div className="border-2 border-amber-500/30 bg-amber-500/5 rounded-md p-4 space-y-3">
+                <div className="mono-label !text-amber-700 flex items-center gap-1">
+                  <AlertTriangle size={14} /> Financial Loss & Sourcing Disruption
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-[12px]">
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Disruption Lead Time</span>
+                    <span className="font-semibold text-foreground">{recoveryTime} Days</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Estimated Profit Loss</span>
+                    <span className="font-semibold text-destructive">${lossEstimate.toLocaleString()} USD</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Recovery Target Date</span>
+                    <span className="font-semibold text-foreground">{recoveryDateString}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Profit Reset Horizon</span>
+                    <span className="font-semibold text-emerald-700">{recoveryTime + 30} Days</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed pt-2 border-t border-border/20">
+                  ⚠️ Supply links with <strong>{affectedNodes.map(n => n.name).join(', ')}</strong> in <strong>{selectedCountry}</strong> are blocked. Daily profit margin is expected to reduce by <strong>${Math.round(lossEstimate * 0.05).toLocaleString()}</strong> until sourcing recovery is complete.
+                </p>
+              </div>
+            )}
+
             {/* Affected Nodes list */}
             <div className="space-y-2">
               <span className="text-[11px] mono-label">Affected Nodes ({affectedNodes.length})</span>
@@ -376,16 +444,33 @@ export const Simulation: React.FC = () => {
               )}
             </div>
 
-            {/* AI Sourcing Recommendation */}
-            <div className="bg-primary/5 border border-primary/20 rounded-md p-3.5 space-y-1.5 text-[12.5px] text-primary">
-              <div className="font-semibold flex items-center gap-1">
-                <CheckCircle size={14} /> Sourcing Mitigation Plan
+            {/* AI Sourcing Recommendation & Suggested Companies */}
+            <div className="border-2 border-emerald-500/30 bg-emerald-500/5 rounded-md p-4 space-y-3">
+              <div className="font-semibold text-[13px] text-primary flex items-center gap-1">
+                <CheckCircle size={14} className="text-emerald-600" /> Sourcing Recovery Recommendations
               </div>
               <p className="text-muted-foreground leading-relaxed text-[11.5px]">
                 {affectedNodes.length > 0
-                  ? `We suggest exploring alternative partners outside of ${selectedCountry} for your ${affectedNodes.map(n => n.category || n.product).filter(Boolean).slice(0, 3).join('/')} lines to safeguard operational continuity.`
-                  : 'Your active Tier-1 supply and distribution nodes appear insulated from this geographic disruption. Keep standard watchlists active.'}
+                  ? `To recover your profit margins, source from candidate companies operating outside of ${selectedCountry}.`
+                  : 'Your active Tier-1 supply and distribution nodes appear insulated from this geographic disruption.'}
               </p>
+
+              {alternateOrgs.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-[10px] mono-label text-emerald-700">Alternative Operators Suggested:</span>
+                  <div className="space-y-1.5">
+                    {alternateOrgs.map((alt) => (
+                      <div key={alt.id} className="bg-background border border-emerald-500/20 rounded p-2 flex justify-between items-center text-[12px]">
+                        <div>
+                          <span className="font-medium text-foreground">{alt.display_name}</span>
+                          <span className="text-[10px] text-muted-foreground block">{alt.industry || 'General Industry'} · {alt.country}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-emerald-600 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">Candidate</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
