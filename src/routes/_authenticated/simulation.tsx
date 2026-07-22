@@ -162,12 +162,17 @@ function SimBody() {
 
   const result = useMemo(() => {
     if (!ran) return null;
-    const targetCountries = new Set(selCountries);
+    const targetCountries = new Set(selCountries.map((c) => c.toLowerCase().trim()));
     const targetCompanyIds = new Set(selCompanyIds);
 
-    const impacted = consumed.filter(
-      (c) => targetCountries.has(c.country) || targetCompanyIds.has(c.orgId),
-    );
+    const impacted = consumed.filter((c) => {
+      const cCountry = (c.country || "").toLowerCase().trim();
+      const countryMatches = targetCountries.has(cCountry) ||
+        (targetCountries.has("india") && cCountry === "inida") ||
+        (targetCountries.has("inida") && cCountry === "india");
+      
+      return countryMatches || targetCompanyIds.has(c.orgId);
+    });
 
     // Calculate risk score (0-100)
     const sevW = SEV_WEIGHT[severity];

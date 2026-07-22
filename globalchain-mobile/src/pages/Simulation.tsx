@@ -25,6 +25,7 @@ export const Simulation: React.FC = () => {
 
   // Simulation Form States
   const [selCountries, setSelCountries] = useState<string[]>(['Japan', 'China']);
+  const [selCompanyIds, setSelCompanyIds] = useState<string[]>([]);
   const [selectedKind, setSelectedKind] = useState('geopolitical');
   const [selectedSeverity, setSelectedSeverity] = useState('high');
   const [simulated, setSimulated] = useState(false);
@@ -143,19 +144,29 @@ export const Simulation: React.FC = () => {
     );
   };
 
+  const toggleCompany = (orgId: string) => {
+    setSelCompanyIds(prev =>
+      prev.includes(orgId)
+        ? prev.filter(id => id !== orgId)
+        : [...prev, orgId]
+    );
+  };
+
   const runSimulation = async () => {
-    if (selCountries.length === 0 || !user) return;
+    if ((selCountries.length === 0 && selCompanyIds.length === 0) || !user) return;
 
-    const lowerSelected = selCountries.map(c => c.toLowerCase());
+    const lowerSelected = selCountries.map(c => c.toLowerCase().trim());
 
-    // Filter nodes in the target countries (supporting common typos like "inida" / "india")
+    // Filter nodes in the target countries or target specific companies
     const affected = nodes.filter((n) => {
-      const country = (n.country || '').toLowerCase();
-      return lowerSelected.some(sel => 
+      const country = (n.country || '').toLowerCase().trim();
+      const countryMatches = lowerSelected.some(sel => 
         country === sel || 
         (sel === 'india' && country === 'inida') || 
         (sel === 'inida' && country === 'india')
       );
+      const companyMatches = selCompanyIds.includes(n.orgId);
+      return countryMatches || companyMatches;
     });
 
     // Calculate simulated risk score (0-100)
@@ -360,11 +371,35 @@ export const Simulation: React.FC = () => {
                 </select>
               </div>
             </div>
+            {nodes.length > 0 && (
+              <div>
+                <div className="mono-label mb-1.5">Specific companies (optional)</div>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-border p-2 space-y-2 bg-background">
+                  {nodes.map((n) => (
+                    <label
+                      key={n.orgId}
+                      className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[12.5px] hover:bg-surface"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selCompanyIds.includes(n.orgId)}
+                        onChange={() => toggleCompany(n.orgId)}
+                        className="rounded border-border text-foreground focus:ring-foreground h-3.5 w-3.5"
+                      />
+                      <span className="truncate text-foreground font-medium">
+                        {n.name}
+                        {n.country ? ` — ${n.country}` : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <button
             onClick={runSimulation}
-            disabled={selCountries.length === 0}
+            disabled={selCountries.length === 0 && selCompanyIds.length === 0}
             className="w-full bg-foreground text-background py-2.5 rounded text-[13px] font-medium flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-60"
           >
             <Play size={13} fill="currentColor" /> Run Scenario Stress Test
