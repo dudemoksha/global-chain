@@ -1,0 +1,39 @@
+name: 2. Appium Mobile 300 TestCases Report
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  appium-report:
+    name: Generate & Download Appium Mobile 300 TestCases Excel Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Project Dependencies
+        run: |
+          cd appium-tests
+          npm install
+
+      - name: Build Professional Appium Mobile Excel Analysis Report
+        run: |
+          cd appium-tests
+          node buildAppiumReport300.js
+
+      - name: Upload Appium Mobile 300 TestCases Excel Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Appium_Mobile_E2E_300_TestCases_Analysis_Report
+          path: appium-tests/Appium_Mobile_E2E_300_TestCases_Analysis_Report.xlsx
+          retention-days: 30

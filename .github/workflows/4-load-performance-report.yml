@@ -1,0 +1,39 @@
+name: 4. Load & Performance 300 TestCases Report
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  load-report:
+    name: Generate & Download Load Performance 300 TestCases Excel Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Project Dependencies
+        run: |
+          cd vercel-selenium-tests
+          npm install
+
+      - name: Build Professional Load & Performance Excel Analysis Report
+        run: |
+          cd vercel-selenium-tests
+          node buildLoadReport300.js
+
+      - name: Upload Load Performance 300 TestCases Excel Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Load_Performance_300_TestCases_Analysis_Report
+          path: load-tests/Load_Performance_300_TestCases_Analysis_Report.xlsx
+          retention-days: 30

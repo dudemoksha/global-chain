@@ -1,0 +1,43 @@
+name: 1. Selenium E2E Web 300 TestCases Report
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  selenium-report:
+    name: Generate & Download Selenium E2E 300 TestCases Excel Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Project Dependencies
+        run: |
+          cd vercel-selenium-tests
+          npm install
+
+      - name: Build Professional Selenium E2E Excel Analysis Report
+        env:
+          VERCEL_URL: "https://global-supply-chain-two.vercel.app"
+          ADMIN_EMAIL: "nmokshasai7@gmail.com"
+          ADMIN_PASSWORD: "111111"
+        run: |
+          cd vercel-selenium-tests
+          node buildReport300.js
+
+      - name: Upload Selenium E2E 300 TestCases Excel Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Selenium_E2E_300_TestCases_Analysis_Report
+          path: vercel-selenium-tests/Selenium_E2E_300_TestCases_Analysis_Report.xlsx
+          retention-days: 30
