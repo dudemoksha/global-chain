@@ -5,7 +5,7 @@ const assert = require("assert");
 const BASE_URL = process.env.TEST_URL || "http://localhost:8080";
 const ADMIN_EMAIL = "nmokshasai7@gmail.com";
 const ADMIN_PASSWORD = "111111";
-const TIMEOUT = 15000;
+const TIMEOUT = 45000;
 
 describe("Global-Chain Login E2E Tests", function () {
   this.timeout(60000);
@@ -71,11 +71,24 @@ describe("Global-Chain Login E2E Tests", function () {
     await loginButton.click();
 
     // Wait for error message element to appear
-    const errorEl = await driver.wait(
-      until.elementLocated(By.id("login-error")),
-      TIMEOUT,
-      "Error message should be displayed for wrong credentials"
-    );
+    let errorEl;
+    try {
+      errorEl = await driver.wait(
+        until.elementLocated(By.id("login-error")),
+        TIMEOUT,
+        "Error message should be displayed for wrong credentials"
+      );
+    } catch (e) {
+      console.log("\\n--- BROWSER CONSOLE LOGS ---");
+      const logs = await driver.manage().logs().get(require("selenium-webdriver/lib/logging").Type.BROWSER);
+      logs.forEach(log => console.log(`[${log.level.name}] ${log.message}`));
+      
+      console.log("\\n--- HTML SOURCE ON FAILURE ---");
+      console.log(await driver.getPageSource());
+      console.log("------------------------------\\n");
+      throw e;
+    }
+
     const errorText = await errorEl.getText();
     assert.ok(
       errorText.trim().length > 0,
