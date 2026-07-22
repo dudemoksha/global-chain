@@ -7,6 +7,24 @@ const ADMIN_EMAIL = "nmokshasai7@gmail.com";
 const ADMIN_PASSWORD = "111111";
 const TIMEOUT = 45000;
 
+async function typeReactInput(driver, id, text) {
+  let success = false;
+  let attempts = 0;
+  while (!success && attempts < 5) {
+    const el = await driver.wait(until.elementLocated(By.id(id)), TIMEOUT);
+    await el.clear();
+    await el.sendKeys(text);
+    await driver.sleep(500);
+    const val = await el.getAttribute("value");
+    if (val === text) {
+      success = true;
+    } else {
+      attempts++;
+      console.log(`React hydration wiped input ${id}, retrying...`);
+    }
+  }
+}
+
 describe("Global-Chain Login E2E Tests", function () {
   this.timeout(60000);
   let driver;
@@ -56,16 +74,8 @@ describe("Global-Chain Login E2E Tests", function () {
     // Wait for React hydration on slow CI runners
     await driver.sleep(2000);
     
-    const emailInput = await driver.wait(
-      until.elementLocated(By.id("email")),
-      TIMEOUT
-    );
-    await emailInput.clear();
-    await emailInput.sendKeys("wrong@example.com");
-
-    const passwordInput = await driver.findElement(By.id("password"));
-    await passwordInput.clear();
-    await passwordInput.sendKeys("wrongpassword");
+    await typeReactInput(driver, "email", "wrong@example.com");
+    await typeReactInput(driver, "password", "wrongpassword");
 
     const loginButton = await driver.findElement(By.id("login-button"));
     await loginButton.click();
@@ -98,16 +108,9 @@ describe("Global-Chain Login E2E Tests", function () {
 
   it("03 — Admin login succeeds and redirects to dashboard", async function () {
     await driver.get(`${BASE_URL}/login`);
-    const emailInput = await driver.wait(
-      until.elementLocated(By.id("email")),
-      TIMEOUT
-    );
-    await emailInput.clear();
-    await emailInput.sendKeys(ADMIN_EMAIL);
-
-    const passwordInput = await driver.findElement(By.id("password"));
-    await passwordInput.clear();
-    await passwordInput.sendKeys(ADMIN_PASSWORD);
+    
+    await typeReactInput(driver, "email", ADMIN_EMAIL);
+    await typeReactInput(driver, "password", ADMIN_PASSWORD);
 
     const loginButton = await driver.findElement(By.id("login-button"));
     await loginButton.click();
