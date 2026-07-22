@@ -2,6 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+async function assertAdmin(supabase: any, userId: string) {
+  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+  const isAdmin = (data ?? []).some((r: { role: string }) => r.role === "admin");
+  if (!isAdmin) throw new Error("Forbidden: admin only");
+}
+
 /**
  * Public function to request a password reset.
  * Inserts a pending request into the password_reset_requests table.
@@ -44,14 +50,7 @@ export const listPasswordResetRequests = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Check admin
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("tier_role")
-      .eq("id", userId)
-      .maybeSingle();
-    if (profile?.tier_role !== "admin") {
-      throw new Error("Unauthorized: Admins only.");
-    }
+    await assertAdmin(supabaseAdmin, userId);
 
     const { data, error } = await supabaseAdmin
       .from("password_reset_requests")
@@ -76,14 +75,7 @@ export const approvePasswordResetRequest = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // 1. Check admin
-    const { data: myProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("tier_role")
-      .eq("id", userId)
-      .maybeSingle();
-    if (myProfile?.tier_role !== "admin") {
-      throw new Error("Unauthorized: Admins only.");
-    }
+    await assertAdmin(supabaseAdmin, userId);
 
     // 2. Fetch reset request details
     const { data: request } = await supabaseAdmin
@@ -133,14 +125,7 @@ export const rejectPasswordResetRequest = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // 1. Check admin
-    const { data: myProfile } = await supabaseAdmin
-      .from("profiles")
-      .select("tier_role")
-      .eq("id", userId)
-      .maybeSingle();
-    if (myProfile?.tier_role !== "admin") {
-      throw new Error("Unauthorized: Admins only.");
-    }
+    await assertAdmin(supabaseAdmin, userId);
 
     // 2. Update request row to rejected
     const { error } = await supabaseAdmin
