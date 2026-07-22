@@ -394,19 +394,18 @@ export const Requests: React.FC = () => {
         </div>
       )}
 
-      {/* Create Trade Request Modal — bottom sheet so it never hides under the header */}
+      {/* Create Trade Request Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-end" onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false); }}>
-          <div className="bg-card w-full rounded-t-2xl border-t border-border space-y-4 max-h-[88vh] overflow-y-auto pb-8">
-            <div className="flex justify-center pt-3 pb-1"><div className="h-1 w-10 rounded-full bg-border" /></div>
-            <div className="flex justify-between items-center border-b border-border pb-3 px-5">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false); }}>
+          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-border pb-2">
               <h3 className="text-[15px] font-display font-medium">New Trade Request</h3>
               <button onClick={() => setShowAddModal(false)} className="text-muted-foreground p-1">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="space-y-3.5 px-5">
+            <form onSubmit={handleAddSubmit} className="space-y-3.5">
               {/* Organization Search */}
               <div className="relative">
                 <div className="mono-label mb-1">Target Organization</div>

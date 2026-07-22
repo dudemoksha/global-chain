@@ -273,13 +273,9 @@ function ProposeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-foreground/30 backdrop-blur-[1px]" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-h-[90vh] overflow-y-auto rounded-t-2xl border-t border-border bg-background pb-safe">
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-border" />
-        </div>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-[1px] p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-md border border-border bg-background p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-2">
           <span className="mono-label">§ Propose to a customer</span>
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground">
             <X size={18} />
