@@ -45,6 +45,9 @@ describe("Global-Chain Login E2E Tests", function () {
 
   it("02 — Login fails with wrong credentials and shows error", async function () {
     await driver.get(`${BASE_URL}/login`);
+    // Wait for React hydration on slow CI runners
+    await driver.sleep(2000);
+    
     const emailInput = await driver.wait(
       until.elementLocated(By.id("email")),
       TIMEOUT
