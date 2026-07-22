@@ -97,11 +97,12 @@ function SimBody() {
     [suppliers],
   );
 
+  const [customCountries, setCustomCountries] = useState<string[]>([]);
   const countries = useMemo(() => {
     const fromSuppliers = consumed.map((c) => c.country).filter(Boolean);
-    const combined = Array.from(new Set([...fromSuppliers, ...DEFAULT_GLOBAL_COUNTRIES])).sort();
+    const combined = Array.from(new Set([...fromSuppliers, ...DEFAULT_GLOBAL_COUNTRIES, ...customCountries])).sort();
     return combined;
-  }, [consumed]);
+  }, [consumed, customCountries]);
 
   const [selKinds, setSelKinds] = useState<SignalKind[]>(["geopolitical", "logistics"]);
   const [selCountries, setSelCountries] = useState<string[]>(["Japan", "China"]);
@@ -116,6 +117,9 @@ function SimBody() {
   const addCustomCountry = () => {
     const trimmed = customCountry.trim();
     if (!trimmed) return;
+    if (!customCountries.includes(trimmed)) {
+      setCustomCountries((s) => [...s, trimmed]);
+    }
     if (!selCountries.includes(trimmed)) {
       setSelCountries((s) => [...s, trimmed]);
     }
@@ -168,6 +172,53 @@ function SimBody() {
 
     return { impacted, signals, score };
   }, [ran, selCountries, selCompanyIds, selKinds, severity, consumed]);
+
+  const handleRun = async () => {
+    setRan(true);
+    if (!result) return;
+    
+    const rows: any[] = [];
+    const now = new Date().toISOString();
+    
+    if (result.impacted.length > 0) {
+      result.impacted.forEach((imp) => {
+        result.signals.forEach((sig) => {
+          rows.push({
+            user_id: me.profile!.id,
+            signal_key: `sim-${sig.id}-${imp.orgId}-${Date.now()}`,
+            kind: sig.kind,
+            severity: sig.severity,
+            country: sig.country,
+            headline: `[SIMULATED] ${sig.headline}`,
+            detail: `${sig.detail} (Impacts connected partner: ${imp.orgName})`,
+            supplier_org_id: imp.orgId,
+            supplier_name: imp.orgName,
+            created_at: now
+          });
+        });
+      });
+    } else {
+      result.signals.forEach((sig) => {
+        rows.push({
+          user_id: me.profile!.id,
+          signal_key: `sim-${sig.id}-generic-${Date.now()}`,
+          kind: sig.kind,
+          severity: sig.severity,
+          country: sig.country,
+          headline: `[SIMULATED] ${sig.headline}`,
+          detail: sig.detail,
+          supplier_org_id: null,
+          supplier_name: null,
+          created_at: now
+        });
+      });
+    }
+
+    if (rows.length > 0) {
+      const { supabase: sb } = await import("@/integrations/supabase/client");
+      await sb.from("alerts").upsert(rows, { onConflict: "user_id,signal_key" });
+    }
+  };
 
   const scoreTone = (n: number) =>
     n >= 60 ? "text-destructive" : n >= 30 ? "text-amber-600" : "text-emerald-700";
@@ -349,7 +400,7 @@ function SimBody() {
                     selKinds.length === 0 ||
                     (selCountries.length === 0 && selCompanyIds.length === 0)
                   }
-                  onClick={() => setRan(true)}
+                  onClick={handleRun}
                   className="flex-1 rounded-md bg-foreground px-4 py-2.5 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
                 >
                   Run simulation
@@ -365,7 +416,7 @@ function SimBody() {
                 )}
               </div>
               <p className="text-[11.5px] text-muted-foreground">
-                Temporary only — nothing is written to your live data.
+                This will trigger live risk alerts across your account.
               </p>
             </div>
           </div>

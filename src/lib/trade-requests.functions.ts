@@ -147,7 +147,8 @@ export const listOutgoingRequests = createServerFn({ method: "GET" })
       .from("trade_requests")
       .select(
         `id, direction, product, quantity, category, message, status, created_at, responded_at,
-         to_org:to_org_id ( id, display_name, country, industry )`,
+         to_org:to_org_id ( id, display_name, country, industry ),
+         to_profile:to_user_id ( legal_name, hq_country, industry )`,
       )
       .eq("from_user_id", userId)
       .order("created_at", { ascending: false });
@@ -164,7 +165,8 @@ export const listIncomingRequests = createServerFn({ method: "GET" })
       .from("trade_requests")
       .select(
         `id, direction, product, quantity, category, message, status, created_at, responded_at,
-         from_org:from_org_id ( id, display_name, country, industry )`,
+         from_org:from_org_id ( id, display_name, country, industry ),
+         from_profile:from_user_id ( legal_name, hq_country, industry )`,
       )
       .eq("to_user_id", userId)
       .order("created_at", { ascending: false });
@@ -207,14 +209,35 @@ export const respondTradeRequest = createServerFn({ method: "POST" })
     if (data.accept) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-      // Determine buyer and seller.
-      // direction 'buy'  → from = buyer,  to = seller
-      // direction 'sell' → from = seller, to = buyer
-      const buyerUserId = req.direction === "buy" ? req.from_user_id : req.to_user_id;
-      const sellerOrgId = req.direction === "buy" ? req.to_org_id : req.from_org_id;
+      // Determine buyer and seller user IDs.
+      // direction 'buy'  → from_user_id = buyer,  to_user_id = seller (the one accepting)
+      // direction 'sell' → from_user_id = seller, to_user_id = buyer (the one accepting)
+      const buyerUserId  = req.direction === "buy" ? req.from_user_id : req.to_user_id!;
+      const sellerUserId = req.direction === "buy" ? req.to_user_id! : req.from_user_id;
+
+      // Resolve seller org — prefer stored from_org_id / to_org_id, else upsert from profile
+      let sellerOrgId: string | null =
+        req.direction === "buy" ? req.to_org_id : req.from_org_id;
+
+      if (!sellerOrgId && sellerUserId) {
+        const { data: sellerProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("legal_name, hq_country, industry")
+          .eq("id", sellerUserId)
+          .maybeSingle();
+
+        if (sellerProfile?.legal_name?.trim()) {
+          const { data: orgId } = await supabaseAdmin.rpc("upsert_organization", {
+            _name: sellerProfile.legal_name,
+            _country: sellerProfile.hq_country ?? "",
+            _industry: sellerProfile.industry ?? "",
+          });
+          sellerOrgId = (orgId as string) ?? null;
+        }
+      }
 
       if (buyerUserId && sellerOrgId) {
-        // Insert the seller as a supplier for the buyer (idempotent on unique).
+        // Insert the seller as a supplier for the buyer (idempotent on conflict).
         await supabaseAdmin
           .from("suppliers")
           .insert({

@@ -152,6 +152,10 @@ function RequestsPage() {
               )}
               {rows.map((r: any) => {
                 const org = tab === "incoming" ? r.from_org : r.to_org;
+                const fallbackProfile = tab === "incoming" ? r.from_profile : r.to_profile;
+                const displayName = org?.display_name || fallbackProfile?.legal_name || "—";
+                const displayCountry = org?.country || fallbackProfile?.hq_country || "";
+                const displayIndustry = org?.industry || fallbackProfile?.industry || "";
                 const label =
                   tab === "incoming"
                     ? r.direction === "buy"
@@ -163,9 +167,9 @@ function RequestsPage() {
                 return (
                   <tr key={r.id} className="border-b border-border last:border-0">
                     <td className="px-4 py-4 align-top">
-                      <div className="font-medium">{org?.display_name || "—"}</div>
+                      <div className="font-medium">{displayName}</div>
                       <div className="mono-label mt-1">
-                        {[org?.country, org?.industry].filter(Boolean).join(" · ") || "—"}
+                        {[displayCountry, displayIndustry].filter(Boolean).join(" · ") || "—"}
                       </div>
                     </td>
                     <td className="px-4 py-4 align-top text-muted-foreground">{label}</td>
@@ -176,7 +180,7 @@ function RequestsPage() {
                       )}
                       {r.message && (
                         <div className="mt-1 max-w-md text-[12px] text-muted-foreground">
-                          "{r.message}"
+                          {r.message}
                         </div>
                       )}
                     </td>
