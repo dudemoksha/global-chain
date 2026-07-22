@@ -7,7 +7,7 @@
     "login": "mocha tests/login.test.js --timeout 60000"
   },
   "dependencies": {
-    "chromedriver": "^151.0.0",
+    "chromedriver": "^150.0.0",
     "mocha": "^11.0.0",
     "selenium-webdriver": "^4.0.0"
   },
