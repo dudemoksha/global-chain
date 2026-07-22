@@ -25,6 +25,7 @@ export const SERVER_FN_HASHES = {
   adminGetUserActivity: '5cc5c792fb99be447abe52ebf3e9f9e8d8c2ba8fc82bf1abe4e4d3efcbda9e6d',
   registerUser: '47ca9349fd6aefbcec5cf48293d884aef31ebab48cb67d61e3bc4c8c3b7321f0',
   searchOrganizations: 'fba221fe137e8fc4a987237ba7c871660765fbb174aab8bc4b61a98f3a8b89cc',
+  recommendAlternatives: '7954a530c1aabf88ff780a1a3aa9b803f6e6f628375ebf04464cd5b63cc02543',
 };
 
 function serializeToSeroval(value: any): any {
@@ -289,4 +290,14 @@ export const registerUser = async (data: any) => {
 
 export const searchOrganizations = async (data: { q: string }) => {
   return callServerFn(SERVER_FN_HASHES.searchOrganizations, data);
+};
+
+export const recommendAlternatives = async (data: {
+  industry?: string;
+  category?: string;
+  avoid_country?: string;
+  exclude_org_id?: string | null;
+  limit?: number;
+}) => {
+  return callServerFn(SERVER_FN_HASHES.recommendAlternatives, data);
 };

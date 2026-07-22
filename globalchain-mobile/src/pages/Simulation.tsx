@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { Play, ShieldAlert, CheckCircle, Plus, AlertTriangle, X } from 'lucide-react';
+import { recommendAlternatives } from '../lib/server-fns';
 
 const KINDS = ['geopolitical', 'climate', 'logistics', 'cyber', 'regulatory'];
 const SEVERITIES = ['medium', 'high', 'critical'];
@@ -206,24 +207,26 @@ export const Simulation: React.FC = () => {
     targetDate.setDate(targetDate.getDate() + calculatedRecovery);
     setRecoveryDateString(targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
 
-    // Fetch alternative companies outside ALL selected countries
+    // Fetch alternative companies outside ALL selected countries using the backend recommendations engine
     try {
-      const { data: alts } = await supabase
-        .from('organizations')
-        .select('id, display_name, country, industry');
-      
-      // Filter out organizations inside any of the selected countries (including typos)
-      const filteredAlts = (alts || []).filter(org => {
-        const country = (org.country || '').toLowerCase();
-        return !lowerSelected.some(sel => 
-          country === sel || 
-          (sel === 'india' && country === 'inida') || 
-          (sel === 'inida' && country === 'india')
-        );
+      const firstAffected = affected[0];
+      const res = await recommendAlternatives({
+        industry: firstAffected?.industry || '',
+        category: firstAffected?.product || firstAffected?.category || '',
+        avoid_country: selCountries.join(','),
+        exclude_org_id: firstAffected?.orgId || null,
+        limit: 3
       });
-      setAlternateOrgs(filteredAlts.slice(0, 3));
+      const mapped = (res || []).map((o: any) => ({
+        id: o.org_id,
+        display_name: o.name,
+        country: o.country,
+        industry: o.industry,
+      }));
+      setAlternateOrgs(mapped);
     } catch (e) {
       console.error(e);
+      setAlternateOrgs([]);
     }
 
     setSimulated(true);
