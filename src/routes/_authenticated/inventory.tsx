@@ -382,15 +382,17 @@ function WarehouseManager({ items, onClose }: { items: WarehouseDTO[]; onClose: 
 
   const add = useMutation({
     mutationFn: () => {
-      if (!picked) throw new Error("Select a real address from the suggestions.");
+      // If user picked from suggestions, use those coords; otherwise geocode the typed address server-side
+      const address = picked ? picked.label : query.trim();
+      if (!address) throw new Error("Please enter an address.");
       return addWarehouse({
         data: {
-          name: name.trim() || picked.label.split(",")[0],
-          address: picked.label,
-          city: picked.city,
-          country: picked.country,
-          lat: picked.lat,
-          lng: picked.lng,
+          name: name.trim() || (picked ? picked.label.split(",")[0] : address.split(",")[0]),
+          address,
+          city: picked?.city ?? "",
+          country: picked?.country ?? "",
+          lat: picked?.lat ?? null,
+          lng: picked?.lng ?? null,
           capacity_units: +capacity || 0,
         },
       });
@@ -476,7 +478,7 @@ function WarehouseManager({ items, onClose }: { items: WarehouseDTO[]; onClose: 
             <div className="flex justify-end">
               <button
                 type="button"
-                disabled={!picked || add.isPending}
+                disabled={(!picked && query.trim().length < 3) || add.isPending}
                 onClick={() => add.mutate()}
                 className="rounded-md bg-foreground px-3 py-1.5 text-[13px] font-medium text-background disabled:opacity-40"
               >

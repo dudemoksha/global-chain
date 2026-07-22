@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Mark } from "@/components/site/mark";
 import { supabase } from "@/integrations/supabase/client";
 import { PASSWORD_RULE, validatePassword } from "@/lib/password";
+import { registerUser } from "@/lib/register.functions";
 
 
 export const Route = createFileRoute("/register")({
@@ -90,35 +91,37 @@ function RegisterPage() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
-
-
-      email: form.workEmail,
-      password: form.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
+    try {
+      // Use server-side admin API — bypasses email system entirely, no rate limits
+      await registerUser({
         data: {
-          full_name: form.fullName,
-          job_title: form.jobTitle,
-          legal_name: form.legalName,
-          hq_country: form.hqCountry,
+          email: form.workEmail,
+          password: form.password,
+          fullName: form.fullName,
+          jobTitle: form.jobTitle,
+          legalName: form.legalName,
+          hqCountry: form.hqCountry,
           industry: form.industry,
-          tier_role: form.tierRole,
+          tierRole: form.tierRole,
           note: form.note,
         },
-      },
-    });
-    setBusy(false);
-    if (error) {
-      setErr(error.message);
-      return;
-    }
-    setSubmitted(true);
-    // If email confirmation is disabled the session is already active — forward
-    // to the dashboard, which handles the pending-approval screen itself.
-    const { data } = await supabase.auth.getSession();
-    if (data.session) {
-      setTimeout(() => navigate({ to: "/dashboard", replace: true }), 1200);
+      });
+
+      // Sign in the user immediately after creation
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: form.workEmail,
+        password: form.password,
+      });
+
+      setBusy(false);
+      setSubmitted(true);
+
+      if (!signInError) {
+        setTimeout(() => navigate({ to: "/dashboard", replace: true }), 1200);
+      }
+    } catch (e: any) {
+      setBusy(false);
+      setErr(e?.message ?? 'Registration failed. Please try again.');
     }
   }
 
@@ -376,17 +379,16 @@ function SubmittedPanel({ org, email }: { org: string; email: string }) {
         Your account is created and your request is in the queue.
       </h2>
       <p className="mt-3 max-w-md text-[13.5px] text-muted-foreground">
-        The trust desk will review {org || "your organisation"} within two
-        business days. A decision will be sent to{" "}
-        <span className="text-foreground">{email || "your work email"}</span>.
-        You'll be taken to a status page shortly.
+        The admin will review {org || "your organisation"} and approve or reject
+        your request. You can check your status by signing in with{" "}
+        <span className="text-foreground">{email || "your email"}</span>.
       </p>
 
       <div className="mt-8 grid grid-cols-3 gap-3">
         {[
           ["Status", "Awaiting review"],
-          ["Queue", "Trust desk"],
-          ["Est. response", "≤ 48h"],
+          ["Queue", "Admin approval"],
+          ["Check", "Sign in to see"],
         ].map(([k, v]) => (
           <div key={k} className="rounded-md border border-border p-3">
             <div className="mono-label">{k}</div>

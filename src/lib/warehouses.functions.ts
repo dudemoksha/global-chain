@@ -50,7 +50,8 @@ async function geocode(query: string): Promise<{
       lat: parseFloat(hit.lat),
       lng: parseFloat(hit.lon),
       display_name: hit.display_name,
-      city: addr.city || addr.town || addr.village || addr.state || "",
+      // Accept any level — city, state, or country as fallback
+      city: addr.city || addr.town || addr.village || addr.state || addr.country || "",
       country: addr.country || "",
     };
   } catch {
@@ -135,10 +136,12 @@ export const addWarehouse = createServerFn({ method: "POST" })
     let { lat, lng, city, country, address } = data;
     if (lat == null || lng == null) {
       const geo = await geocode(address);
-      if (!geo) throw new Error("Address could not be located. Please enter a real, more specific address.");
-      lat = geo.lat; lng = geo.lng;
-      if (!city) city = geo.city;
-      if (!country) country = geo.country;
+      if (geo) {
+        lat = geo.lat; lng = geo.lng;
+        if (!city) city = geo.city;
+        if (!country) country = geo.country;
+      }
+      // If geocode fails, save warehouse without coordinates (lat/lng remain null)
     }
     const { data: row, error } = await supabase
       .from("warehouses")

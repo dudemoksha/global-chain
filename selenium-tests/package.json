@@ -1,0 +1,17 @@
+{
+  "name": "globalchain-selenium-tests",
+  "version": "1.0.0",
+  "description": "Selenium E2E tests for Global-Chain supply chain application",
+  "scripts": {
+    "test": "mocha tests/*.test.js --timeout 60000",
+    "login": "mocha tests/login.test.js --timeout 60000"
+  },
+  "dependencies": {
+    "chromedriver": "^151.0.0",
+    "mocha": "^11.0.0",
+    "selenium-webdriver": "^4.0.0"
+  },
+  "allowScripts": {
+    "chromedriver@151.0.0": true
+  }
+}

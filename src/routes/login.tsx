@@ -130,6 +130,7 @@ function LoginPage() {
 
           <form className="space-y-5" onSubmit={onSubmit}>
             <Field
+              id="email"
               label="Work email"
               type="email"
               autoComplete="email"
@@ -139,6 +140,7 @@ function LoginPage() {
               placeholder="operator@acme.co"
             />
             <Field
+              id="password"
               label="Password"
               type="password"
               autoComplete="current-password"
@@ -154,6 +156,7 @@ function LoginPage() {
             )}
 
             <button
+              id="login-button"
               type="submit"
               disabled={busy}
               className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2.5 text-[13px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-60"
@@ -182,6 +185,7 @@ function LoginPage() {
 }
 
 function Field({
+  id,
   label,
   type,
   value,
@@ -190,6 +194,7 @@ function Field({
   required,
   autoComplete,
 }: {
+  id?: string;
   label: string;
   type: string;
   value: string;
@@ -206,6 +211,7 @@ function Field({
       <div className="mono-label mb-1.5">{label}</div>
       <div className="relative">
         <input
+          id={id}
           type={inputType}
           value={value}
           onChange={(e) => onChange(e.target.value)}

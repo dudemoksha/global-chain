@@ -9,6 +9,7 @@ import {
   severityColor,
   type SignalKind,
   type Severity,
+  type RiskSignal,
 } from "@/lib/risk-signals";
 import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 
@@ -59,6 +60,19 @@ function SimulationPage() {
 
 const KINDS: SignalKind[] = ["geopolitical", "climate", "logistics", "cyber", "regulatory"];
 const SEVS: Severity[] = ["medium", "high", "critical"];
+const DEFAULT_GLOBAL_COUNTRIES = [
+  "Japan",
+  "China",
+  "Germany",
+  "United States",
+  "Taiwan",
+  "Russia",
+  "India",
+  "South Korea",
+  "Vietnam",
+  "Mexico",
+];
+
 const CRIT_WEIGHT: Record<string, number> = { critical: 1, high: 0.75, medium: 0.5, low: 0.25 };
 const SEV_WEIGHT: Record<Severity, number> = { critical: 1, high: 0.75, medium: 0.5, low: 0.25 };
 
@@ -68,7 +82,7 @@ function SimBody() {
   // What the user CONSUMES = their suppliers' products.
   const consumed = useMemo(
     () =>
-      suppliers
+      (suppliers ?? [])
         .filter((s) => s.organizations)
         .map((s) => ({
           id: s.id,
@@ -83,47 +97,74 @@ function SimBody() {
     [suppliers],
   );
 
-  const countries = useMemo(
-    () => Array.from(new Set(consumed.map((c) => c.country).filter(Boolean))).sort(),
-    [consumed],
-  );
+  const countries = useMemo(() => {
+    const fromSuppliers = consumed.map((c) => c.country).filter(Boolean);
+    const combined = Array.from(new Set([...fromSuppliers, ...DEFAULT_GLOBAL_COUNTRIES])).sort();
+    return combined;
+  }, [consumed]);
 
-  const [selKinds, setSelKinds] = useState<SignalKind[]>(["geopolitical"]);
-  const [selCountries, setSelCountries] = useState<string[]>(
-    countries.length ? [countries[0]] : [],
-  );
+  const [selKinds, setSelKinds] = useState<SignalKind[]>(["geopolitical", "logistics"]);
+  const [selCountries, setSelCountries] = useState<string[]>(["Japan", "China"]);
   const [selCompanyIds, setSelCompanyIds] = useState<string[]>([]);
   const [severity, setSeverity] = useState<Severity>("high");
+  const [customCountry, setCustomCountry] = useState("");
   const [ran, setRan] = useState(false);
 
   const toggle = <T,>(arr: T[], v: T) =>
     arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 
+  const addCustomCountry = () => {
+    const trimmed = customCountry.trim();
+    if (!trimmed) return;
+    if (!selCountries.includes(trimmed)) {
+      setSelCountries((s) => [...s, trimmed]);
+    }
+    setCustomCountry("");
+  };
+
   const result = useMemo(() => {
     if (!ran) return null;
     const targetCountries = new Set(selCountries);
     const targetCompanyIds = new Set(selCompanyIds);
+
     const impacted = consumed.filter(
       (c) => targetCountries.has(c.country) || targetCompanyIds.has(c.orgId),
     );
 
-    // Composite simulated risk score 0-100
-    const total = consumed.length || 1;
+    // Calculate risk score (0-100)
     const sevW = SEV_WEIGHT[severity];
-    const kindMult = 0.6 + Math.min(selKinds.length, 5) * 0.12;
-    const weighted = impacted.reduce(
-      (acc, i) => acc + (CRIT_WEIGHT[i.criticality] ?? 0.5),
-      0,
-    );
-    const raw = Math.round((weighted / total) * 100 * sevW * kindMult);
-    const score = Math.min(100, raw);
+    const kindMult = 0.5 + Math.min(selKinds.length, 5) * 0.15;
 
-    const signals = generateSignals(
-      consumed.map((o) => ({ id: o.orgId, name: o.orgName, country: o.country })),
-      selCountries[0]
-        ? { country: selCountries[0], kind: selKinds[0] ?? "geopolitical", severity }
-        : null,
-    ).filter((s) => s.id.startsWith("sim-") || targetCountries.has(s.country));
+    let score = 0;
+    if (consumed.length > 0) {
+      const weighted = impacted.reduce(
+        (acc, i) => acc + (CRIT_WEIGHT[i.criticality] ?? 0.5),
+        0,
+      );
+      score = Math.min(100, Math.round((weighted / consumed.length) * 100 * sevW * kindMult));
+    } else {
+      // General simulation score for empty/sandbox mode based on selected parameters
+      const countryFactor = Math.min(selCountries.length, 3) * 20;
+      score = Math.min(100, Math.round((countryFactor + 30) * sevW * kindMult));
+    }
+
+    // Generate signals across all selected countries
+    const generatedSignals: RiskSignal[] = [];
+    const orgsList = consumed.map((o) => ({ id: o.orgId, name: o.orgName, country: o.country }));
+
+    selCountries.forEach((c) => {
+      const countrySignals = generateSignals(orgsList, {
+        country: c,
+        kind: selKinds[0] ?? "geopolitical",
+        severity,
+      });
+      generatedSignals.push(...countrySignals);
+    });
+
+    // Deduplicate signals by ID
+    const uniqueSignalsMap = new Map<string, RiskSignal>();
+    generatedSignals.forEach((s) => uniqueSignalsMap.set(s.id, s));
+    const signals = Array.from(uniqueSignalsMap.values());
 
     return { impacted, signals, score };
   }, [ran, selCountries, selCompanyIds, selKinds, severity, consumed]);
@@ -138,9 +179,8 @@ function SimBody() {
         What-if. Nothing here is saved.
       </h1>
       <p className="mt-2 max-w-2xl text-[13.5px] text-muted-foreground">
-        Model a disruption against the products you consume from your suppliers.
-        Everything runs ephemerally — your live risk history, alerts and supplier
-        records are never touched.
+        Model a disruption against your supply chain or global regions. Everything runs
+        ephemerally — live risk history, alerts and supplier records are never touched.
       </p>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -151,10 +191,13 @@ function SimBody() {
             <span className="mono-label">{consumed.length} inbound</span>
           </div>
           {consumed.length === 0 ? (
-            <p className="p-5 text-[13px] text-muted-foreground">
-              You aren't buying anything yet. Add suppliers in the Suppliers tab to
-              run scenarios against your inbound products.
-            </p>
+            <div className="p-5 text-[13px] text-muted-foreground space-y-2">
+              <p className="font-medium text-foreground">No suppliers added yet.</p>
+              <p>
+                You can still run scenarios using the right-side builder to test global regional shocks!
+                Add suppliers under the Suppliers tab anytime to connect your own inbound products.
+              </p>
+            </div>
           ) : (
             <ul className="max-h-[560px] divide-y divide-border overflow-auto">
               {consumed.map((c) => {
@@ -219,29 +262,44 @@ function SimBody() {
               </Field>
 
               <Field label="Affected countries (multi-select)">
-                {countries.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground">
-                    No supplier countries in your graph yet.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {countries.map((c) => (
-                      <Chip
-                        key={c}
-                        active={selCountries.includes(c)}
-                        onClick={() => setSelCountries((s) => toggle(s, c))}
-                      >
-                        {c}
-                      </Chip>
-                    ))}
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 border border-border rounded-md">
+                  {countries.map((c) => (
+                    <Chip
+                      key={c}
+                      active={selCountries.includes(c)}
+                      onClick={() => setSelCountries((s) => toggle(s, c))}
+                    >
+                      {c}
+                    </Chip>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="text"
+                    value={customCountry}
+                    onChange={(e) => setCustomCountry(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustomCountry();
+                      }
+                    }}
+                    placeholder="Add custom country (e.g. Brazil)"
+                    className="flex-1 rounded-md border border-border bg-background px-2.5 py-1 text-[12px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomCountry}
+                    disabled={!customCountry.trim()}
+                    className="rounded-md border border-border px-3 py-1 text-[12px] hover:bg-surface disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
               </Field>
 
-              <Field label="Specific companies (optional)">
-                {consumed.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground">No suppliers yet.</p>
-                ) : (
+              {consumed.length > 0 && (
+                <Field label="Specific companies (optional)">
                   <div className="max-h-40 overflow-auto rounded-md border border-border p-2">
                     {consumed.map((c) => (
                       <label
@@ -262,8 +320,8 @@ function SimBody() {
                       </label>
                     ))}
                   </div>
-                )}
-              </Field>
+                </Field>
+              )}
 
               <Field label="Severity">
                 <div className="flex gap-1.5">
@@ -284,7 +342,7 @@ function SimBody() {
                 </div>
               </Field>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   disabled={
@@ -292,7 +350,7 @@ function SimBody() {
                     (selCountries.length === 0 && selCompanyIds.length === 0)
                   }
                   onClick={() => setRan(true)}
-                  className="flex-1 rounded-md bg-foreground px-4 py-2 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
+                  className="flex-1 rounded-md bg-foreground px-4 py-2.5 text-[13px] font-medium text-background hover:opacity-90 disabled:opacity-40"
                 >
                   Run simulation
                 </button>
@@ -300,7 +358,7 @@ function SimBody() {
                   <button
                     type="button"
                     onClick={() => setRan(false)}
-                    className="rounded-md border border-border px-4 py-2 text-[12.5px] text-muted-foreground hover:bg-surface"
+                    className="rounded-md border border-border px-4 py-2.5 text-[12.5px] text-muted-foreground hover:bg-surface"
                   >
                     Reset
                   </button>
@@ -359,13 +417,9 @@ function SimBody() {
                 )}
               </Section>
 
-              {result.impacted.length === 0 ? (
-                <div className="rounded-md border border-dashed border-border p-5 text-[13px] text-muted-foreground">
-                  None of your inbound products are exposed to this scenario.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {result.impacted.map((o) => (
+              <div className="space-y-4">
+                {result.impacted.length > 0 ? (
+                  result.impacted.map((o) => (
                     <div key={o.id} className="space-y-3">
                       {/* Impacted item — red box */}
                       <div className="rounded-md border-2 border-destructive/40 bg-destructive/10 p-4">
@@ -409,9 +463,25 @@ function SimBody() {
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                ) : (
+                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-3">
+                    <div className="mono-label !text-emerald-700">
+                      Alternate Suppliers & Mitigations
+                    </div>
+                    <p className="text-[13px] text-muted-foreground">
+                      Simulating disruption for <strong>{selCountries.join(", ")}</strong>. Cross-operator candidates operating outside these disruption zones:
+                    </p>
+                    <RecommendationsPanel
+                      title=""
+                      subtitle={`Alternate suppliers avoiding ${selCountries[0] ?? "disruption zone"}`}
+                      avoidCountry={selCountries[0] ?? ""}
+                      limit={5}
+                      compact
+                    />
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
