@@ -59,15 +59,19 @@ describe("Global-Chain Login E2E Tests", function () {
     const loginButton = await driver.findElement(By.id("login-button"));
     await loginButton.click();
 
-    // Wait for error message to appear
-    await driver.sleep(3000);
-    const pageSource = await driver.getPageSource();
-    assert.ok(
-      pageSource.toLowerCase().includes("invalid") ||
-        pageSource.toLowerCase().includes("error") ||
-        pageSource.toLowerCase().includes("wrong") ||
-        pageSource.toLowerCase().includes("incorrect"),
+    // Wait for error message element to appear
+    const errorEl = await driver.wait(
+      until.elementLocated(By.id("login-error")),
+      TIMEOUT,
       "Error message should be displayed for wrong credentials"
+    );
+    const errorText = await errorEl.getText();
+    assert.ok(
+      errorText.toLowerCase().includes("invalid") ||
+        errorText.toLowerCase().includes("error") ||
+        errorText.toLowerCase().includes("wrong") ||
+        errorText.toLowerCase().includes("incorrect"),
+      "Error message should contain expected text"
     );
   });
 

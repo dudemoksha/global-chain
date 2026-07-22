@@ -150,7 +150,7 @@ function LoginPage() {
             />
 
             {err && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
+              <div id="login-error" className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-[12.5px] text-destructive">
                 {err}
               </div>
             )}
