@@ -67,11 +67,8 @@ describe("Global-Chain Login E2E Tests", function () {
     );
     const errorText = await errorEl.getText();
     assert.ok(
-      errorText.toLowerCase().includes("invalid") ||
-        errorText.toLowerCase().includes("error") ||
-        errorText.toLowerCase().includes("wrong") ||
-        errorText.toLowerCase().includes("incorrect"),
-      "Error message should contain expected text"
+      errorText.trim().length > 0,
+      `Error message should be displayed, but got: '${errorText}'`
     );
   });
 

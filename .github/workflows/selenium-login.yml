@@ -33,9 +33,9 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
-      - name: Start dev server in background
+      - name: Start production server in background
         run: |
-          npm run dev &
+          npm run preview -- --host 0.0.0.0 --port 8080 &
           echo "Waiting for server to start..."
           sleep 15
         env:
