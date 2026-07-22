@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Global-Chain',
   webDir: '.output/public',
   server: {
-    url: 'http://10.130.65.141:8080',
+    url: 'https://global-supply-chain-two.vercel.app',
     cleartext: true,
   },
 };
