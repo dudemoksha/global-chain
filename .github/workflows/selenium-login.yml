@@ -35,7 +35,7 @@ jobs:
 
       - name: Start production server in background
         run: |
-          npm run preview -- --host 0.0.0.0 --port 8080 &
+          npm run preview -- --host 0.0.0.0 --port 4173 --strictPort &
           echo "Waiting for server to start..."
           sleep 15
         env:
@@ -56,7 +56,7 @@ jobs:
           cd selenium-tests
           npm run login
         env:
-          TEST_URL: "http://localhost:8080"
+          TEST_URL: "http://localhost:4173"
           DISPLAY: ":99"
 
       - name: Upload test results on failure
