@@ -50,7 +50,25 @@ export const recommendAlternatives = createServerFn({ method: "POST" })
       .from("suppliers")
       .select("supplier_org_id")
       .eq("owner_id", userId);
-    const ownSet = new Set((own ?? []).map((r) => r.supplier_org_id));
+    const ownSet = new Set((own ?? []).map((r) => r.supplier_org_id).filter(Boolean));
+
+    // Exclude the user's own organization itself
+    const { data: myProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("legal_name")
+      .eq("id", userId)
+      .maybeSingle();
+    if (myProfile?.legal_name) {
+      const norm = myProfile.legal_name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const { data: myOrg } = await supabaseAdmin
+        .from("organizations")
+        .select("id")
+        .eq("name_norm", norm)
+        .maybeSingle();
+      if (myOrg) {
+        ownSet.add(myOrg.id);
+      }
+    }
 
     type Agg = {
       org_id: string;

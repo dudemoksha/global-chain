@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import { listMySuppliers } from "@/lib/suppliers.functions";
+import { listMyCustomers } from "@/lib/trade-requests.functions";
 import {
   generateSignals,
   severityColor,
@@ -18,6 +19,10 @@ const suppliersQuery = queryOptions({
   queryKey: ["suppliers", "mine"],
   queryFn: () => listMySuppliers(),
 });
+const customersQuery = queryOptions({
+  queryKey: ["customers", "mine"],
+  queryFn: () => listMyCustomers(),
+});
 
 export const Route = createFileRoute("/_authenticated/simulation")({
   head: () => ({
@@ -29,7 +34,10 @@ export const Route = createFileRoute("/_authenticated/simulation")({
   loader: async ({ context }) => {
     const me = await context.queryClient.ensureQueryData(meQuery);
     if (me.profile?.is_approved || me.isAdmin) {
-      await context.queryClient.ensureQueryData(suppliersQuery).catch(() => []);
+      await Promise.all([
+        context.queryClient.ensureQueryData(suppliersQuery).catch(() => []),
+        context.queryClient.ensureQueryData(customersQuery).catch(() => []),
+      ]);
     }
     return null;
   },
@@ -78,13 +86,17 @@ const SEV_WEIGHT: Record<Severity, number> = { critical: 1, high: 0.75, medium: 
 
 function SimBody() {
   const { data: suppliers } = useSuspenseQuery(suppliersQuery);
+  const { data: customers } = useSuspenseQuery(customersQuery);
 
-  // What the user CONSUMES = their suppliers' products.
-  const consumed = useMemo(
-    () =>
-      (suppliers ?? [])
-        .filter((s) => s.organizations)
-        .map((s) => ({
+  // Combine both suppliers (inbound) and customers (outbound)
+  const consumed = useMemo(() => {
+    const list: any[] = [];
+    
+    // Add suppliers
+    (suppliers ?? [])
+      .filter((s) => s.organizations)
+      .forEach((s) => {
+        list.push({
           id: s.id,
           orgId: s.organizations!.id,
           orgName: s.organizations!.display_name,
@@ -93,9 +105,31 @@ function SimBody() {
           product: s.product ?? "",
           category: s.category ?? "",
           criticality: (s.criticality ?? "medium") as string,
-        })),
-    [suppliers],
-  );
+          type: "Supplier (Inbound)",
+          spend: s.annual_spend_bucket || "N/A"
+        });
+      });
+
+    // Add customers
+    (customers ?? [])
+      .filter((c) => c.customer)
+      .forEach((c) => {
+        list.push({
+          id: c.id,
+          orgId: c.customer!.id,
+          orgName: c.customer!.legal_name,
+          country: c.customer!.hq_country ?? "",
+          industry: c.customer!.industry ?? "",
+          product: c.product || "",
+          category: c.category || "",
+          criticality: "medium",
+          type: "Customer (Outbound)",
+          spend: "N/A"
+        });
+      });
+
+    return list;
+  }, [suppliers, customers]);
 
   const [customCountries, setCustomCountries] = useState<string[]>([]);
   const countries = useMemo(() => {
@@ -238,15 +272,14 @@ function SimBody() {
         {/* LEFT: what the user consumes */}
         <div className="rounded-md border border-border bg-card">
           <div className="flex items-baseline justify-between border-b border-border px-5 py-3">
-            <div className="mono-label">What you consume</div>
-            <span className="mono-label">{consumed.length} inbound</span>
+            <div className="mono-label">Your Connections</div>
+            <span className="mono-label">{consumed.length} nodes</span>
           </div>
           {consumed.length === 0 ? (
             <div className="p-5 text-[13px] text-muted-foreground space-y-2">
-              <p className="font-medium text-foreground">No suppliers added yet.</p>
+              <p className="font-medium text-foreground">No connections added yet.</p>
               <p>
-                You can still run scenarios using the right-side builder to test global regional shocks!
-                Add suppliers under the Suppliers tab anytime to connect your own inbound products.
+                Add suppliers or customers to connect your own trade lines and run stress test models!
               </p>
             </div>
           ) : (
@@ -270,7 +303,7 @@ function SimBody() {
                           {c.product || c.category || "Unspecified product"}
                         </div>
                         <div className="mono-label mt-0.5">
-                          from {c.orgName}
+                          {c.type} · {c.orgName}
                           {c.country ? ` · ${c.country}` : ""}
                         </div>
                       </div>
@@ -493,13 +526,13 @@ function SimBody() {
                           <div className="flex items-baseline justify-between gap-3">
                             <div>
                               <div className="mono-label !text-destructive">
-                                Impacted inbound
+                                Impacted {o.type.toLowerCase().includes("supplier") ? "inbound supplier" : "outbound customer"}
                               </div>
                               <div className="mt-1 text-[14.5px] font-medium">
                                 {o.product || o.category || "Unspecified product"}
                               </div>
                               <div className="mono-label mt-0.5">
-                                from {o.orgName}
+                                {o.type} · {o.orgName}
                                 {o.country ? ` · ${o.country}` : ""}
                               </div>
                             </div>
@@ -530,9 +563,21 @@ function SimBody() {
                               <span className="font-semibold text-emerald-700 text-[14px]">{recoveryTime + 30} Days to Profit Reset</span>
                             </div>
                           </div>
-                          <p className="text-[12px] text-muted-foreground leading-relaxed pt-1.5 border-t border-border/20">
-                            ⚠️ Sourcing from <strong>{o.orgName}</strong> in <strong>{o.country}</strong> is simulated to halt. The estimated impact will reduce your margin on <strong>{o.product || o.category || "materials"}</strong> by <strong>${Math.round(lossEstimate * 0.05).toLocaleString()}</strong> daily until alternate vendor mapping is fully active.
-                          </p>
+                          
+                          <div className="text-[12px] text-muted-foreground leading-relaxed pt-1.5 border-t border-border/20 space-y-1.5">
+                            {o.type.toLowerCase().includes("supplier") ? (
+                              <p>
+                                ⚠️ You are procuring <strong>{o.product || o.category || "materials"}</strong> from <strong>{o.orgName}</strong> in <strong>{o.country}</strong> (Annual spend: {o.spend}). Since this region is affected, you risk a supply halt. We recommend shifting procurement to one of the candidates below to protect your product lines.
+                              </p>
+                            ) : (
+                              <p>
+                                ⚠️ You are supplying <strong>{o.product || o.category || "materials"}</strong> to <strong>{o.orgName}</strong> in <strong>{o.country}</strong>. A regional threat here will stall delivery routes and interrupt your sales flow. We suggest holding buffer stock, negotiating temporary storage, or finding backup buyers.
+                              </p>
+                            )}
+                            <p className="text-[11px] font-mono text-destructive">
+                              Estimated daily financial margin impact: <strong>-${Math.round(lossEstimate * 0.05).toLocaleString()} USD / day</strong>
+                            </p>
+                          </div>
                         </div>
 
                         {/* Recommendations — green box */}

@@ -451,9 +451,28 @@ export const Simulation: React.FC = () => {
                     <span className="font-semibold text-emerald-700">{recoveryTime + 30} Days</span>
                   </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed pt-2 border-t border-border/20">
-                  ⚠️ Supply links with <strong>{affectedNodes.map(n => n.name).join(', ')}</strong> in <strong>{selCountries.join(', ')}</strong> are blocked. Daily profit margin is expected to reduce by <strong>${Math.round(lossEstimate * 0.05).toLocaleString()}</strong> until sourcing recovery is complete.
-                </p>
+                
+                <div className="text-[11px] text-muted-foreground leading-relaxed pt-2 border-t border-border/20 space-y-2">
+                  {affectedNodes.map((node) => {
+                    const isInbound = node.type.toLowerCase().includes('supplier');
+                    return (
+                      <div key={node.id} className="pb-1 border-b border-dashed border-border/20 last:border-0 last:pb-0">
+                        {isInbound ? (
+                          <p>
+                            ⚠️ You procure <strong>{node.product || node.category || 'goods'}</strong> from <strong>{node.name}</strong> in <strong>{node.country}</strong>. Sourcing is simulated to halt. We recommend shifting procurement to candidate companies below to safeguard lines.
+                          </p>
+                        ) : (
+                          <p>
+                            ⚠️ You supply <strong>{node.product || node.category || 'goods'}</strong> to <strong>{node.name}</strong> in <strong>{node.country}</strong>. A regional threat here will stall delivery routes and interrupt sales flow. We suggest safety stock or alternate buyers.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <p className="text-[10px] font-mono text-destructive font-medium pt-1">
+                    Estimated daily financial margin impact: <strong>-${Math.round(lossEstimate * 0.05).toLocaleString()} USD / day</strong>
+                  </p>
+                </div>
               </div>
             )}
 
