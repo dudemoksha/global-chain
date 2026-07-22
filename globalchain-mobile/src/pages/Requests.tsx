@@ -195,14 +195,38 @@ export const Requests: React.FC = () => {
     }
 
     try {
-      const res = await searchOrganizations({ q: val.trim() });
-      const mapped = (res || []).map((o: any) => ({
-        id: o.id,
-        display_name: o.display_name,
-        country: o.country,
-        industry: o.industry,
-      }));
-      setMatchingOrgs(mapped);
+      const { data: profiles, error: pErr } = await supabase
+        .from('profiles')
+        .select('id, legal_name, hq_country, industry')
+        .eq('is_approved', true)
+        .neq('id', user?.id || '')
+        .ilike('legal_name', `%${val.trim()}%`)
+        .limit(6);
+
+      if (pErr) throw pErr;
+
+      const results: any[] = [];
+      for (const p of profiles || []) {
+        const name = (p.legal_name || '').trim();
+        if (!name) continue;
+
+        const { data: orgId, error: rpcErr } = await supabase.rpc('upsert_organization', {
+          _name: name,
+          _country: p.hq_country || '',
+          _industry: p.industry || '',
+        });
+
+        if (!rpcErr && orgId) {
+          results.push({
+            id: orgId,
+            display_name: name,
+            country: p.hq_country || '',
+            industry: p.industry || '',
+          });
+        }
+      }
+
+      setMatchingOrgs(results);
     } catch (e) {
       console.error('Error searching organizations:', e);
       setMatchingOrgs([]);
