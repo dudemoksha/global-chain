@@ -1,0 +1,15 @@
+{
+  "name": "vercel-selenium-tests",
+  "version": "1.0.0",
+  "description": "Selenium E2E Test Suite targeting Vercel deployment with Excel report generator",
+  "main": "runner.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node runner.js"
+  },
+  "dependencies": {
+    "chromedriver": "^151.0.0",
+    "selenium-webdriver": "^4.46.0",
+    "xlsx": "^0.18.5"
+  }
+}
