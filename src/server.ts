@@ -46,15 +46,41 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Handle CORS preflight (OPTIONS) requests
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "x-tsr-serverfn, authorization, content-type, accept",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      const normalized = await normalizeCatastrophicSsrResponse(response);
+      
+      // Append CORS origin header to response
+      const newHeaders = new Headers(normalized.headers);
+      newHeaders.set("Access-Control-Allow-Origin", "*");
+      
+      return new Response(normalized.body, {
+        status: normalized.status,
+        statusText: normalized.statusText,
+        headers: newHeaders,
+      });
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {
         status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: { 
+          "content-type": "text/html; charset=utf-8",
+          "Access-Control-Allow-Origin": "*"
+        },
       });
     }
   },

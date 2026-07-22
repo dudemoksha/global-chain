@@ -222,38 +222,14 @@ function ProposeModal({
   const searchOrgs = async (q: string) => {
     if (q.trim().length < 2) { setOrgResults([]); return; }
     try {
-      const { data: profiles, error: pErr } = await supabase
-        .from('profiles')
-        .select('id, legal_name, hq_country, industry')
-        .eq('is_approved', true)
-        .neq('id', userId)
-        .ilike('legal_name', `%${q.trim()}%`)
-        .limit(6);
-
-      if (pErr) throw pErr;
-
-      const results: any[] = [];
-      for (const p of profiles || []) {
-        const name = (p.legal_name || '').trim();
-        if (!name) continue;
-
-        const { data: orgId, error: rpcErr } = await supabase.rpc('upsert_organization', {
-          _name: name,
-          _country: p.hq_country || '',
-          _industry: p.industry || '',
-        });
-
-        if (!rpcErr && orgId) {
-          results.push({
-            id: orgId,
-            legal_name: name,
-            hq_country: p.hq_country || '',
-            industry: p.industry || '',
-          });
-        }
-      }
-
-      setOrgResults(results);
+      const res = await searchOrganizations({ q: q.trim() });
+      const mapped = (res || []).map((o: any) => ({
+        id: o.id,
+        legal_name: o.display_name,
+        hq_country: o.country,
+        industry: o.industry
+      }));
+      setOrgResults(mapped);
     } catch (e) {
       console.error('Error searching organizations:', e);
       setOrgResults([]);

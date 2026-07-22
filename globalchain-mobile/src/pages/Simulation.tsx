@@ -59,14 +59,22 @@ export const Simulation: React.FC = () => {
         // Fetch customers (outbound)
         const { data: custs, error: custErr } = await supabase
           .from('trade_requests')
-          .select(`
-            id, product, category,
-            to_profile:to_user_id ( id, legal_name, hq_country, industry )
-          `)
+          .select('id, product, category, to_user_id')
           .eq('from_user_id', user.id)
           .eq('status', 'accepted')
           .eq('direction', 'sell');
         if (custErr) throw custErr;
+
+        // Separately resolve profiles for customers
+        const customerUserIds = [...new Set((custs || []).map(c => c.to_user_id).filter(Boolean))] as string[];
+        let profileMap = new Map<string, any>();
+        if (customerUserIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, legal_name, hq_country, industry')
+            .in('id', customerUserIds);
+          profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        }
 
         const combined: any[] = [];
         
@@ -89,13 +97,14 @@ export const Simulation: React.FC = () => {
 
         // Add customers
         (custs || []).forEach((c: any) => {
-          if (c.to_profile) {
+          const prof = c.to_user_id ? profileMap.get(c.to_user_id) : null;
+          if (prof) {
             combined.push({
               id: c.id,
-              orgId: c.to_profile.id,
-              name: c.to_profile.legal_name,
-              country: c.to_profile.hq_country || '',
-              industry: c.to_profile.industry || '',
+              orgId: prof.id,
+              name: prof.legal_name,
+              country: prof.hq_country || '',
+              industry: prof.industry || '',
               product: c.product || '',
               category: c.category || '',
               criticality: 'medium',
