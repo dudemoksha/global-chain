@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Check, X, Search, ArrowRightLeft, MessageCircle } from 'lucide-react';
+import { searchOrganizations } from '../lib/server-fns';
 
 export const Requests: React.FC = () => {
   const { user, profile } = useAuth();
@@ -31,32 +32,58 @@ export const Requests: React.FC = () => {
     setLoading(true);
 
     try {
-      const [incRes, outRes] = await Promise.all([
-        supabase
-          .from('trade_requests')
-          .select(`
-            id, direction, product, quantity, category, message, status, responded_at, created_at,
-            from_org:from_org_id ( display_name, country, industry ),
-            from_profile:from_user_id ( legal_name, hq_country, industry )
-          `)
-          .eq('to_user_id', user.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('trade_requests')
-          .select(`
-            id, direction, product, quantity, category, message, status, responded_at, created_at,
-            to_org:to_org_id ( display_name, country, industry ),
-            to_profile:to_user_id ( legal_name, hq_country, industry )
-          `)
-          .eq('from_user_id', user.id)
-          .order('created_at', { ascending: false })
-      ]);
+      // Fetch incoming requests (org joins only, no profile FK joins through auth.users)
+      const { data: incData, error: incErr } = await supabase
+        .from('trade_requests')
+        .select(`
+          id, direction, product, quantity, category, message, status, responded_at, created_at,
+          from_user_id,
+          from_org:from_org_id ( id, display_name, country, industry )
+        `)
+        .eq('to_user_id', user.id)
+        .order('created_at', { ascending: false });
 
-      if (incRes.error) throw incRes.error;
-      if (outRes.error) throw outRes.error;
+      if (incErr) throw incErr;
 
-      setIncoming(incRes.data || []);
-      setOutgoing(outRes.data || []);
+      // Fetch outgoing requests (org joins only)
+      const { data: outData, error: outErr } = await supabase
+        .from('trade_requests')
+        .select(`
+          id, direction, product, quantity, category, message, status, responded_at, created_at,
+          to_user_id,
+          to_org:to_org_id ( id, display_name, country, industry )
+        `)
+        .eq('from_user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (outErr) throw outErr;
+
+      // Separately resolve profiles for display names
+      const allUserIds = new Set<string>();
+      (incData || []).forEach(r => { if (r.from_user_id) allUserIds.add(r.from_user_id); });
+      (outData || []).forEach(r => { if (r.to_user_id) allUserIds.add(r.to_user_id); });
+
+      let profileMap = new Map<string, any>();
+      if (allUserIds.size > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, legal_name, hq_country, industry')
+          .in('id', [...allUserIds]);
+        profileMap = new Map((profiles || []).map(p => [p.id, p]));
+      }
+
+      // Attach profiles to request objects
+      const enrichedInc = (incData || []).map(r => ({
+        ...r,
+        from_profile: r.from_user_id ? (profileMap.get(r.from_user_id) || null) : null,
+      }));
+      const enrichedOut = (outData || []).map(r => ({
+        ...r,
+        to_profile: r.to_user_id ? (profileMap.get(r.to_user_id) || null) : null,
+      }));
+
+      setIncoming(enrichedInc);
+      setOutgoing(enrichedOut);
     } catch (e) {
       console.error('Error fetching trade requests:', e);
     } finally {
@@ -68,10 +95,15 @@ export const Requests: React.FC = () => {
     fetchRequests();
   }, [user]);
 
-  // Respond Accept/Decline
+  // Respond Accept/Decline — with auto-linking supplier on accept (same as website)
   const handleRespond = async (requestId: string, accept: boolean) => {
+    if (!user) return;
     setBusyId(requestId);
     try {
+      // Find the request in incoming list
+      const req = incoming.find(r => r.id === requestId);
+      if (!req) throw new Error('Request not found.');
+
       const status = accept ? 'accepted' : 'rejected';
       const { error } = await supabase
         .from('trade_requests')
@@ -82,6 +114,70 @@ export const Requests: React.FC = () => {
         .eq('id', requestId);
 
       if (error) throw error;
+
+      // On accept: auto-link the supplier relationship (mirroring website logic)
+      if (accept && req) {
+        try {
+          // Determine buyer and seller
+          // direction 'buy'  → from_user_id = buyer, to_user_id = seller (me, the one accepting)
+          // direction 'sell' → from_user_id = seller, to_user_id = buyer (me, the one accepting)
+          const buyerUserId = req.direction === 'buy' ? req.from_user_id : user.id;
+          const sellerUserId = req.direction === 'buy' ? user.id : req.from_user_id;
+
+          // Resolve the seller's organization
+          let sellerOrgId: string | null = req.direction === 'buy' 
+            ? null  // seller is me, need to resolve my org
+            : (req.from_org?.id || null);  // seller is them
+
+          if (!sellerOrgId) {
+            // Look up seller profile and find/create their org
+            const { data: sellerProfile } = await supabase
+              .from('profiles')
+              .select('legal_name, hq_country, industry')
+              .eq('id', sellerUserId)
+              .maybeSingle();
+
+            if (sellerProfile?.legal_name?.trim()) {
+              // Try to find existing org by normalized name
+              const normName = sellerProfile.legal_name.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const { data: existingOrg } = await supabase
+                .from('organizations')
+                .select('id')
+                .eq('name_norm', normName)
+                .maybeSingle();
+
+              if (existingOrg) {
+                sellerOrgId = existingOrg.id;
+              }
+            }
+          }
+
+          if (buyerUserId && sellerOrgId) {
+            // Insert the seller as a supplier for the buyer (idempotent)
+            await supabase
+              .from('suppliers')
+              .insert({
+                owner_id: buyerUserId,
+                supplier_org_id: sellerOrgId,
+                category: req.category || '',
+                criticality: 'medium',
+                annual_spend_bucket: '',
+                product: req.product || '',
+                notes: req.product
+                  ? `Auto-linked via trade request: ${req.product}${req.quantity ? ` × ${req.quantity}` : ''}`
+                  : 'Auto-linked via accepted trade request',
+              })
+              .then(r => {
+                if (r.error && r.error.code !== '23505') {
+                  console.error('Auto-link supplier error:', r.error);
+                }
+              });
+          }
+        } catch (linkErr) {
+          console.error('Auto-link supplier failed (non-blocking):', linkErr);
+        }
+      }
+
       fetchRequests();
     } catch (e: any) {
       alert(e.message || 'Failed to update request.');
@@ -90,7 +186,7 @@ export const Requests: React.FC = () => {
     }
   };
 
-  // Search organizations in real-time
+  // Search organizations using server function (same as website)
   const searchOrgs = async (val: string) => {
     setOrgSearch(val);
     if (val.trim().length < 2) {
@@ -99,16 +195,17 @@ export const Requests: React.FC = () => {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id, display_name, country, industry, name_norm')
-        .ilike('display_name', `%${val}%`)
-        .limit(6);
-
-      if (error) throw error;
-      setMatchingOrgs(data || []);
+      const res = await searchOrganizations({ q: val.trim() });
+      const mapped = (res || []).map((o: any) => ({
+        id: o.id,
+        display_name: o.display_name,
+        country: o.country,
+        industry: o.industry,
+      }));
+      setMatchingOrgs(mapped);
     } catch (e) {
       console.error('Error searching organizations:', e);
+      setMatchingOrgs([]);
     }
   };
 
@@ -123,7 +220,7 @@ export const Requests: React.FC = () => {
     setFormBusy(true);
 
     try {
-      // 1. Resolve receiver user ID
+      // 1. Resolve receiver user ID via the org
       const { data: toUserId, error: rpcErr } = await supabase.rpc('get_user_for_org', {
         _org_id: selectedOrg.id
       });
@@ -327,7 +424,7 @@ export const Requests: React.FC = () => {
                   <>
                     <input
                       type="text"
-                      placeholder="Search company display name..."
+                      placeholder="Search company name..."
                       value={orgSearch}
                       onChange={(e) => searchOrgs(e.target.value)}
                       className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none"
@@ -419,7 +516,7 @@ export const Requests: React.FC = () => {
 
               {/* Message */}
               <div>
-                <div className="mono-label mb-1">Negotation Message</div>
+                <div className="mono-label mb-1">Negotiation Message</div>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}

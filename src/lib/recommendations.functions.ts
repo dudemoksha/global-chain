@@ -84,10 +84,21 @@ export const recommendAlternatives = createServerFn({ method: "POST" })
 
     const wantIndustry = data.industry.trim().toLowerCase();
     const wantCategory = data.category.trim().toLowerCase();
-    const avoid = data.avoid_country.trim().toLowerCase();
+    // Support comma-separated list of countries to avoid (e.g. "India,Russia")
+    const avoidSet = new Set(
+      data.avoid_country
+        .split(",")
+        .map((c: string) => c.trim().toLowerCase())
+        .filter(Boolean),
+    );
 
     const scored: Recommendation[] = [];
     for (const a of byOrg.values()) {
+      // Hard-exclude any org located inside ANY of the disruption zones
+      if (avoidSet.size > 0 && a.country && avoidSet.has(a.country.toLowerCase())) {
+        continue;
+      }
+
       const reasons: string[] = [];
       let score = 0;
       if (wantIndustry && a.industry.toLowerCase() === wantIndustry) {
@@ -103,7 +114,7 @@ export const recommendAlternatives = createServerFn({ method: "POST" })
           reasons.push(`Serves category: ${data.category}`);
         }
       }
-      if (avoid && a.country && a.country.toLowerCase() !== avoid) {
+      if (avoidSet.size > 0 && a.country) {
         score += 1;
         reasons.push(`Located in ${a.country} — outside disruption zone`);
       }

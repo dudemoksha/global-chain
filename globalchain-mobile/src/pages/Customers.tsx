@@ -12,44 +12,62 @@ export const Customers: React.FC = () => {
   const [showPropose, setShowPropose] = useState(false);
 
   const fetchCustomers = async () => {
-    if (!user) return;
+    if (!user || !profile) return;
     setLoading(true);
     try {
-      // Get my own organization id from profiles
-      const { data: myProfile } = await supabase
-        .from('profiles')
-        .select('id, legal_name, hq_country, industry')
-        .eq('id', user.id)
+      // Match website logic: find everyone who has declared MY organization as their supplier
+      // Step 1: Find my org by normalized legal_name
+      const myName = (profile.legal_name || '').trim();
+      if (!myName) { setLoading(false); return; }
+
+      const normName = myName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const { data: myOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('name_norm', normName)
         .maybeSingle();
 
-      if (!myProfile) { setLoading(false); return; }
+      if (!myOrg) {
+        // No org registered yet — try to find customers via trade_requests instead
+        setCustomers([]);
+        setLoading(false);
+        return;
+      }
 
-      // Find all trade_requests where I am the seller (sell direction) and accepted
-      const { data: reqs } = await supabase
-        .from('trade_requests')
-        .select(`
-          id, category, message, created_at,
-          from_profile:from_user_id ( id, legal_name, hq_country, industry ),
-          to_profile:to_user_id ( id, legal_name, hq_country, industry )
-        `)
-        .eq('status', 'accepted')
-        .eq('direction', 'sell')
-        .eq('from_user_id', user.id);
+      // Step 2: Find all suppliers rows where supplier_org_id = my org (these are my customers)
+      const { data: rows, error } = await supabase
+        .from('suppliers')
+        .select('id, owner_id, category, criticality, notes, product, created_at')
+        .eq('supplier_org_id', myOrg.id)
+        .order('created_at', { ascending: false });
 
-      // Also fetch where others buy from us
-      const { data: incoming } = await supabase
-        .from('trade_requests')
-        .select(`
-          id, category, message, created_at,
-          from_profile:from_user_id ( id, legal_name, hq_country, industry ),
-          to_profile:to_user_id ( id, legal_name, hq_country, industry )
-        `)
-        .eq('status', 'accepted')
-        .eq('direction', 'buy')
-        .eq('to_user_id', user.id);
+      if (error) throw error;
+      if (!rows?.length) {
+        setCustomers([]);
+        setLoading(false);
+        return;
+      }
 
-      const all = [...(reqs || []), ...(incoming || [])];
-      setCustomers(all);
+      // Step 3: Resolve the owner profiles (the buyers = my customers)
+      const ownerIds = [...new Set(rows.map(r => r.owner_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, legal_name, hq_country, industry, work_email')
+        .in('id', ownerIds);
+
+      const byId = new Map((profiles || []).map(p => [p.id, p]));
+
+      const enriched = rows.map(r => ({
+        id: r.id,
+        category: r.category,
+        criticality: r.criticality,
+        notes: r.notes,
+        product: r.product,
+        created_at: r.created_at,
+        customer: byId.get(r.owner_id) || null,
+      }));
+
+      setCustomers(enriched);
     } catch (e) {
       console.error('Error fetching customers:', e);
     } finally {
@@ -59,21 +77,21 @@ export const Customers: React.FC = () => {
 
   useEffect(() => {
     fetchCustomers();
-  }, [user]);
+  }, [user, profile]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return customers;
     return customers.filter(r => {
-      const cust = r.from_profile?.legal_name || r.to_profile?.legal_name || '';
-      const country = r.from_profile?.hq_country || r.to_profile?.hq_country || '';
+      const name = r.customer?.legal_name || '';
+      const country = r.customer?.hq_country || '';
       const cat = r.category || '';
-      return cust.toLowerCase().includes(q) || country.toLowerCase().includes(q) || cat.toLowerCase().includes(q);
+      return name.toLowerCase().includes(q) || country.toLowerCase().includes(q) || cat.toLowerCase().includes(q);
     });
   }, [customers, search]);
 
   const stats = useMemo(() => {
-    const countries = new Set(customers.map(r => r.from_profile?.hq_country || r.to_profile?.hq_country).filter(Boolean)).size;
+    const countries = new Set(customers.map(r => r.customer?.hq_country).filter(Boolean)).size;
     const categories = new Set(customers.map(r => r.category).filter(Boolean)).size;
     return { total: customers.length, countries, categories };
   }, [customers]);
@@ -98,7 +116,7 @@ export const Customers: React.FC = () => {
           Customers
         </h1>
         <p className="mt-1.5 text-[12.5px] text-muted-foreground">
-          Organisations that buy from you. Propose to new customers using the button below.
+          Organisations that buy from you. Every organisation that has declared you as their supplier appears here.
         </p>
         <button
           onClick={() => setShowPropose(true)}
@@ -146,9 +164,9 @@ export const Customers: React.FC = () => {
       ) : (
         <div className="space-y-3">
           {filtered.map(r => {
-            const name = r.from_profile?.legal_name || r.to_profile?.legal_name || '—';
-            const country = r.from_profile?.hq_country || r.to_profile?.hq_country || '';
-            const industry = r.from_profile?.industry || r.to_profile?.industry || '';
+            const name = r.customer?.legal_name || '—';
+            const country = r.customer?.hq_country || '';
+            const industry = r.customer?.industry || '';
             return (
               <div key={r.id} className="rounded-md border border-border bg-card p-4">
                 <div className="font-medium text-[14px]">{name}</div>
@@ -157,10 +175,11 @@ export const Customers: React.FC = () => {
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-[12px] text-muted-foreground">
                   {r.category && <span className="rounded-full bg-surface px-2 py-0.5 border border-border">{r.category}</span>}
+                  {r.product && <span className="rounded-full bg-surface px-2 py-0.5 border border-border">{r.product}</span>}
                   <span>{new Date(r.created_at).toLocaleDateString()}</span>
                 </div>
-                {r.message && (
-                  <div className="mt-2 text-[12px] text-muted-foreground">{r.message}</div>
+                {r.notes && (
+                  <div className="mt-2 text-[12px] text-muted-foreground italic">{r.notes}</div>
                 )}
               </div>
             );
@@ -224,11 +243,18 @@ function ProposeModal({
     setBusy(true);
     setErr(null);
     try {
+      // Resolve the target user for this org
+      const { data: toUserId, error: rpcErr } = await supabase.rpc('get_user_for_org', {
+        _org_id: selectedOrg.id
+      });
+      if (rpcErr) throw rpcErr;
+      if (!toUserId) throw new Error('That organisation doesn\'t have an approved operator.');
+
       const { error } = await supabase.from('trade_requests').insert({
         from_user_id: userId,
         from_org_id: null,
-        to_user_id: selectedOrg.id,
-        to_org_id: selectedOrg.id, // use profile id as org id placeholder
+        to_user_id: toUserId,
+        to_org_id: selectedOrg.id,
         direction: 'sell' as const,
         product: product.trim(),
         quantity: quantity.trim(),

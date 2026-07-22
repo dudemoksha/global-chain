@@ -143,17 +143,35 @@ export const listOutgoingRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Query trade_requests with org joins only (not profile joins through auth.users)
     const { data, error } = await supabase
       .from("trade_requests")
       .select(
         `id, direction, product, quantity, category, message, status, created_at, responded_at,
-         to_org:to_org_id ( id, display_name, country, industry ),
-         to_profile:to_user_id ( legal_name, hq_country, industry )`,
+         to_user_id,
+         to_org:to_org_id ( id, display_name, country, industry )`,
       )
       .eq("from_user_id", userId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return data ?? [];
+
+    // Separately resolve profiles for the to_user_ids
+    const toUserIds = [...new Set((data ?? []).map((r) => r.to_user_id).filter(Boolean))] as string[];
+    let profileMap = new Map<string, any>();
+    if (toUserIds.length > 0) {
+      const { data: profiles } = await supabaseAdmin
+        .from("profiles")
+        .select("id, legal_name, hq_country, industry")
+        .in("id", toUserIds);
+      profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    }
+
+    return (data ?? []).map((r) => ({
+      ...r,
+      to_profile: profileMap.get(r.to_user_id) ?? null,
+    }));
   });
 
 /** Requests sent to me (incoming). */
@@ -161,17 +179,35 @@ export const listIncomingRequests = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Query trade_requests with org joins only (not profile joins through auth.users)
     const { data, error } = await supabase
       .from("trade_requests")
       .select(
         `id, direction, product, quantity, category, message, status, created_at, responded_at,
-         from_org:from_org_id ( id, display_name, country, industry ),
-         from_profile:from_user_id ( legal_name, hq_country, industry )`,
+         from_user_id,
+         from_org:from_org_id ( id, display_name, country, industry )`,
       )
       .eq("to_user_id", userId)
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return data ?? [];
+
+    // Separately resolve profiles for the from_user_ids
+    const fromUserIds = [...new Set((data ?? []).map((r) => r.from_user_id).filter(Boolean))] as string[];
+    let profileMap = new Map<string, any>();
+    if (fromUserIds.length > 0) {
+      const { data: profiles } = await supabaseAdmin
+        .from("profiles")
+        .select("id, legal_name, hq_country, industry")
+        .in("id", fromUserIds);
+      profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+    }
+
+    return (data ?? []).map((r) => ({
+      ...r,
+      from_profile: profileMap.get(r.from_user_id) ?? null,
+    }));
   });
 
 /** Recipient responds to a pending request. On accept, create the supplier linkage. */

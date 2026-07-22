@@ -1,10 +1,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
-import { Play, ShieldAlert, CheckCircle, Plus, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Play, ShieldAlert, CheckCircle, Plus, AlertTriangle, X } from 'lucide-react';
 
 const KINDS = ['geopolitical', 'climate', 'logistics', 'cyber', 'regulatory'];
 const SEVERITIES = ['medium', 'high', 'critical'];
+const DEFAULT_GLOBAL_COUNTRIES = [
+  'Japan',
+  'China',
+  'Germany',
+  'United States',
+  'Taiwan',
+  'Russia',
+  'India',
+  'South Korea',
+];
 
 export const Simulation: React.FC = () => {
   const { user } = useAuth();
@@ -14,7 +24,7 @@ export const Simulation: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Simulation Form States
-  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selCountries, setSelCountries] = useState<string[]>(['Japan', 'China']);
   const [selectedKind, setSelectedKind] = useState('geopolitical');
   const [selectedSeverity, setSelectedSeverity] = useState('high');
   const [simulated, setSimulated] = useState(false);
@@ -108,17 +118,10 @@ export const Simulation: React.FC = () => {
     nodes.forEach((n) => {
       if (n.country) set.add(n.country);
     });
-    const defaults = ['Japan', 'China', 'Germany', 'United States', 'Taiwan', 'India', 'South Korea'];
-    defaults.forEach(c => set.add(c));
+    DEFAULT_GLOBAL_COUNTRIES.forEach(c => set.add(c));
     customCountries.forEach(c => set.add(c));
     return Array.from(set).sort();
   }, [nodes, customCountries]);
-
-  useEffect(() => {
-    if (countries.length > 0 && !selectedCountry) {
-      setSelectedCountry(countries[0]);
-    }
-  }, [countries, selectedCountry]);
 
   const addCustomCountry = () => {
     const trimmed = customCountryInput.trim();
@@ -126,17 +129,34 @@ export const Simulation: React.FC = () => {
     if (!customCountries.includes(trimmed)) {
       setCustomCountries(prev => [...prev, trimmed]);
     }
-    setSelectedCountry(trimmed);
+    if (!selCountries.includes(trimmed)) {
+      setSelCountries(prev => [...prev, trimmed]);
+    }
     setCustomCountryInput('');
   };
 
-  const runSimulation = async () => {
-    if (!selectedCountry || !user) return;
-
-    // Filter nodes in the target country
-    const affected = nodes.filter(
-      (n) => (n.country || '').toLowerCase() === selectedCountry.toLowerCase()
+  const toggleCountry = (country: string) => {
+    setSelCountries(prev => 
+      prev.includes(country) 
+        ? prev.filter(c => c !== country) 
+        : [...prev, country]
     );
+  };
+
+  const runSimulation = async () => {
+    if (selCountries.length === 0 || !user) return;
+
+    const lowerSelected = selCountries.map(c => c.toLowerCase());
+
+    // Filter nodes in the target countries (supporting common typos like "inida" / "india")
+    const affected = nodes.filter((n) => {
+      const country = (n.country || '').toLowerCase();
+      return lowerSelected.some(sel => 
+        country === sel || 
+        (sel === 'india' && country === 'inida') || 
+        (sel === 'inida' && country === 'india')
+      );
+    });
 
     // Calculate simulated risk score (0-100)
     const critWeights: Record<string, number> = { critical: 40, high: 25, medium: 15, low: 5 };
@@ -175,14 +195,22 @@ export const Simulation: React.FC = () => {
     targetDate.setDate(targetDate.getDate() + calculatedRecovery);
     setRecoveryDateString(targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
 
-    // Fetch alternative companies outside this country
+    // Fetch alternative companies outside ALL selected countries
     try {
       const { data: alts } = await supabase
         .from('organizations')
-        .select('id, display_name, country, industry')
-        .not('country', 'eq', selectedCountry)
-        .limit(3);
-      setAlternateOrgs(alts || []);
+        .select('id, display_name, country, industry');
+      
+      // Filter out organizations inside any of the selected countries (including typos)
+      const filteredAlts = (alts || []).filter(org => {
+        const country = (org.country || '').toLowerCase();
+        return !lowerSelected.some(sel => 
+          country === sel || 
+          (sel === 'india' && country === 'inida') || 
+          (sel === 'inida' && country === 'india')
+        );
+      });
+      setAlternateOrgs(filteredAlts.slice(0, 3));
     } catch (e) {
       console.error(e);
     }
@@ -194,37 +222,41 @@ export const Simulation: React.FC = () => {
     const now = new Date().toISOString();
 
     const headline = `${selectedSeverity.toUpperCase()} risk alert: Simulated ${selectedKind} disruption`;
-    const detail = `A simulated stress test scenario of severity ${selectedSeverity} has been initiated for region/node ${selectedCountry}.`;
+    
+    selCountries.forEach((country) => {
+      const detail = `A simulated stress test scenario of severity ${selectedSeverity} has been initiated for region/node ${country}.`;
+      const countryAffected = affected.filter(n => (n.country || '').toLowerCase() === country.toLowerCase());
 
-    if (affected.length > 0) {
-      affected.forEach((node) => {
+      if (countryAffected.length > 0) {
+        countryAffected.forEach((node) => {
+          rows.push({
+            user_id: user.id,
+            signal_key: `sim-mob-${selectedKind}-${node.orgId}-${Date.now()}`,
+            kind: selectedKind,
+            severity: selectedSeverity,
+            country: country,
+            headline: `[SIMULATED] ${headline}`,
+            detail: `${detail} (Impacts connection: ${node.name} — ${node.type})`,
+            supplier_org_id: node.type.includes('Supplier') ? node.orgId : null,
+            supplier_name: node.name,
+            created_at: now
+          });
+        });
+      } else {
         rows.push({
           user_id: user.id,
-          signal_key: `sim-mob-${selectedKind}-${node.orgId}-${Date.now()}`,
+          signal_key: `sim-mob-${selectedKind}-${country.toLowerCase()}-${Date.now()}`,
           kind: selectedKind,
           severity: selectedSeverity,
-          country: selectedCountry,
+          country: country,
           headline: `[SIMULATED] ${headline}`,
-          detail: `${detail} (Impacts connection: ${node.name} — ${node.type})`,
-          supplier_org_id: node.type.includes('Supplier') ? node.orgId : null,
-          supplier_name: node.name,
+          detail: detail,
+          supplier_org_id: null,
+          supplier_name: null,
           created_at: now
         });
-      });
-    } else {
-      rows.push({
-        user_id: user.id,
-        signal_key: `sim-mob-${selectedKind}-generic-${Date.now()}`,
-        kind: selectedKind,
-        severity: selectedSeverity,
-        country: selectedCountry,
-        headline: `[SIMULATED] ${headline}`,
-        detail: detail,
-        supplier_org_id: null,
-        supplier_name: null,
-        created_at: now
-      });
-    }
+      }
+    });
 
     if (rows.length > 0) {
       await supabase.from('alerts').upsert(rows, { onConflict: 'user_id,signal_key' });
@@ -258,22 +290,27 @@ export const Simulation: React.FC = () => {
           
           <div className="space-y-3">
             <div>
-              <div className="mono-label mb-1">Target Country</div>
-              <div className="flex gap-2">
-                <select
-                  value={selectedCountry}
-                  onChange={(e) => setSelectedCountry(e.target.value)}
-                  className="flex-1 border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none"
-                >
-                  <option value="">Select country...</option>
-                  {countries.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+              <div className="mono-label mb-1">Target Countries (Multi-select)</div>
+              
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 border border-border bg-background rounded-md mb-2">
+                {countries.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggleCountry(c)}
+                    className={`rounded-full border px-2.5 py-1 text-[11.5px] font-medium capitalize transition-colors ${
+                      selCountries.includes(c)
+                        ? 'border-primary bg-primary/10 text-primary font-semibold'
+                        : 'border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
               </div>
               
               {/* Add Custom Country Input */}
-              <div className="mt-2 flex gap-1.5">
+              <div className="flex gap-1.5">
                 <input
                   type="text"
                   placeholder="Or enter new country (e.g. India)"
@@ -285,7 +322,7 @@ export const Simulation: React.FC = () => {
                       addCustomCountry();
                     }
                   }}
-                  className="flex-1 border border-border bg-background rounded px-2.5 py-1 text-[12.5px] outline-none"
+                  className="flex-1 border border-border bg-background rounded px-2.5 py-1 text-[12.5px] outline-none focus:border-foreground"
                 />
                 <button
                   type="button"
@@ -303,7 +340,7 @@ export const Simulation: React.FC = () => {
                 <select
                   value={selectedKind}
                   onChange={(e) => setSelectedKind(e.target.value)}
-                  className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] capitalize"
+                  className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] capitalize outline-none focus:border-foreground"
                 >
                   {KINDS.map((k) => (
                     <option key={k} value={k}>{k}</option>
@@ -315,7 +352,7 @@ export const Simulation: React.FC = () => {
                 <select
                   value={selectedSeverity}
                   onChange={(e) => setSelectedSeverity(e.target.value)}
-                  className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] capitalize"
+                  className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] capitalize outline-none focus:border-foreground"
                 >
                   {SEVERITIES.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -327,7 +364,7 @@ export const Simulation: React.FC = () => {
 
           <button
             onClick={runSimulation}
-            disabled={!selectedCountry}
+            disabled={selCountries.length === 0}
             className="w-full bg-foreground text-background py-2.5 rounded text-[13px] font-medium flex items-center justify-center gap-1.5 hover:opacity-90 disabled:opacity-60"
           >
             <Play size={13} fill="currentColor" /> Run Scenario Stress Test
@@ -346,7 +383,7 @@ export const Simulation: React.FC = () => {
           ) : (
             <div className="space-y-1.5 max-h-40 overflow-y-auto">
               {nodes.map((n) => {
-                const isHit = selectedCountry && n.country.toLowerCase() === selectedCountry.toLowerCase();
+                const isHit = n.country && selCountries.map(c => c.toLowerCase()).includes(n.country.toLowerCase());
                 return (
                   <div key={n.id} className={`p-2 rounded text-[12px] flex justify-between items-center ${isHit ? 'bg-destructive/10 border-l-2 border-destructive' : 'bg-surface'}`}>
                     <div>
@@ -378,7 +415,7 @@ export const Simulation: React.FC = () => {
               <div>
                 <span className="mono-label block">Simulated Risk Score</span>
                 <span className="text-[12.5px] text-muted-foreground mt-0.5">
-                  For {selectedKind} event in {selectedCountry}
+                  For {selectedKind} event in {selCountries.join(', ')}
                 </span>
               </div>
               <div className={`h-16 w-16 rounded-full border-4 flex flex-col items-center justify-center font-display font-semibold text-lg ${
@@ -415,7 +452,7 @@ export const Simulation: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed pt-2 border-t border-border/20">
-                  ⚠️ Supply links with <strong>{affectedNodes.map(n => n.name).join(', ')}</strong> in <strong>{selectedCountry}</strong> are blocked. Daily profit margin is expected to reduce by <strong>${Math.round(lossEstimate * 0.05).toLocaleString()}</strong> until sourcing recovery is complete.
+                  ⚠️ Supply links with <strong>{affectedNodes.map(n => n.name).join(', ')}</strong> in <strong>{selCountries.join(', ')}</strong> are blocked. Daily profit margin is expected to reduce by <strong>${Math.round(lossEstimate * 0.05).toLocaleString()}</strong> until sourcing recovery is complete.
                 </p>
               </div>
             )}
@@ -451,7 +488,7 @@ export const Simulation: React.FC = () => {
               </div>
               <p className="text-muted-foreground leading-relaxed text-[11.5px]">
                 {affectedNodes.length > 0
-                  ? `To recover your profit margins, source from candidate companies operating outside of ${selectedCountry}.`
+                  ? `To recover your profit margins, source from candidate companies operating outside of ${selCountries.join(', ')}.`
                   : 'Your active Tier-1 supply and distribution nodes appear insulated from this geographic disruption.'}
               </p>
 

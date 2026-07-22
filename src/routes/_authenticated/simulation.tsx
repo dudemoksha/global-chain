@@ -541,14 +541,12 @@ function SimBody() {
                             Recommended alternatives
                           </div>
                           <div className="mt-2">
-                            <RecommendationsPanel
+                        <RecommendationsPanel
                               title=""
-                              subtitle={`Cross-operator matches${
-                                o.country ? `, avoiding ${o.country}` : ""
-                              }.`}
+                              subtitle={`Cross-operator matches, avoiding ${selCountries.join(", ")}.`}
                               industry={o.industry}
                               category={o.product || o.category}
-                              avoidCountry={o.country}
+                              avoidCountry={selCountries.join(",")}
                               excludeOrgId={o.orgId}
                               limit={5}
                               compact
@@ -568,8 +566,8 @@ function SimBody() {
                     </p>
                     <RecommendationsPanel
                       title=""
-                      subtitle={`Alternate suppliers avoiding ${selCountries[0] ?? "disruption zone"}`}
-                      avoidCountry={selCountries[0] ?? ""}
+                      subtitle={`Alternate suppliers avoiding ${selCountries.join(", ")}`}
+                      avoidCountry={selCountries.join(",")}
                       limit={5}
                       compact
                     />
