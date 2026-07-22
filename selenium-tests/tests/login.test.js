@@ -31,10 +31,18 @@ describe("Global-Chain Login E2E Tests", function () {
 
   it("01 — Login page loads with email and password fields", async function () {
     await driver.get(`${BASE_URL}/login`);
-    const emailInput = await driver.wait(
-      until.elementLocated(By.id("email")),
-      TIMEOUT
-    );
+    let emailInput;
+    try {
+      emailInput = await driver.wait(
+        until.elementLocated(By.id("email")),
+        TIMEOUT
+      );
+    } catch (e) {
+      console.log("\\n--- HTML SOURCE ON FAILURE ---");
+      console.log(await driver.getPageSource());
+      console.log("------------------------------\\n");
+      throw e;
+    }
     const passwordInput = await driver.findElement(By.id("password"));
     const loginButton = await driver.findElement(By.id("login-button"));
 
