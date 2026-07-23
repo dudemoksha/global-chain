@@ -18,7 +18,7 @@ const DEFAULT_GLOBAL_COUNTRIES = [
 ];
 
 export const Simulation: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [nodes, setNodes] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [customCountries, setCustomCountries] = useState<string[]>([]);
@@ -64,24 +64,50 @@ export const Simulation: React.FC = () => {
           .eq('owner_id', user.id);
         if (supErr) throw supErr;
 
-        // Fetch customers (outbound)
-        const { data: custs, error: custErr } = await supabase
-          .from('trade_requests')
-          .select('id, product, category, to_user_id')
-          .eq('from_user_id', user.id)
-          .eq('status', 'accepted')
-          .eq('direction', 'sell');
-        if (custErr) throw custErr;
+        // Fetch customers (outbound) — users who have declared MY organisation as their supplier
+        const myName = (profile?.legal_name || '').trim();
+        const custEnriched: any[] = [];
+        if (myName) {
+          const normName = myName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const { data: myOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('name_norm', normName)
+            .maybeSingle();
 
-        // Separately resolve profiles for customers
-        const customerUserIds = [...new Set((custs || []).map(c => c.to_user_id).filter(Boolean))] as string[];
-        let profileMap = new Map<string, any>();
-        if (customerUserIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, legal_name, hq_country, industry')
-            .in('id', customerUserIds);
-          profileMap = new Map((profiles || []).map(p => [p.id, p]));
+          if (myOrg) {
+            const { data: rows } = await supabase
+              .from('suppliers')
+              .select('id, owner_id, category, criticality, notes, product, created_at')
+              .eq('supplier_org_id', myOrg.id);
+
+            if (rows && rows.length > 0) {
+              const ownerIds = [...new Set(rows.map(r => r.owner_id))];
+              const { data: customerProfiles } = await supabase
+                .from('profiles')
+                .select('id, legal_name, hq_country, industry, work_email')
+                .in('id', ownerIds);
+
+              const byId = new Map((customerProfiles || []).map(p => [p.id, p]));
+              rows.forEach((r) => {
+                const customerProfile = byId.get(r.owner_id);
+                if (customerProfile) {
+                  custEnriched.push({
+                    id: r.id,
+                    orgId: customerProfile.id,
+                    name: customerProfile.legal_name,
+                    country: customerProfile.hq_country || '',
+                    industry: customerProfile.industry || '',
+                    product: r.product || '',
+                    category: r.category || '',
+                    criticality: 'medium',
+                    type: 'Customer (Outbound)',
+                    spend: 'N/A'
+                  });
+                }
+              });
+            }
+          }
         }
 
         const combined: any[] = [];
@@ -105,23 +131,7 @@ export const Simulation: React.FC = () => {
         });
 
         // Add customers
-        (custs || []).forEach((c: any) => {
-          const prof = c.to_user_id ? profileMap.get(c.to_user_id) : null;
-          if (prof) {
-            combined.push({
-              id: c.id,
-              orgId: prof.id,
-              name: prof.legal_name,
-              country: prof.hq_country || '',
-              industry: prof.industry || '',
-              product: c.product || '',
-              category: c.category || '',
-              criticality: 'medium',
-              type: 'Customer (Outbound)',
-              spend: 'N/A'
-            });
-          }
-        });
+        combined.push(...custEnriched);
 
         setNodes(combined);
       } catch (e) {
@@ -131,7 +141,7 @@ export const Simulation: React.FC = () => {
       }
     };
     fetchConnections();
-  }, [user]);
+  }, [user, profile]);
 
   // Unique list of countries combined with custom countries
   const countries = useMemo(() => {
@@ -193,14 +203,16 @@ export const Simulation: React.FC = () => {
     const critWeights: Record<string, number> = { critical: 40, high: 25, medium: 15, low: 5 };
     const sevWeights: Record<string, number> = { critical: 1.5, high: 1.0, medium: 0.6 };
 
-    let score = 10; // baseline
-    affected.forEach((n) => {
-      const baseWeight = critWeights[n.criticality] || 15;
-      const multiplier = sevWeights[selectedSeverity] || 1.0;
-      score += baseWeight * multiplier;
-    });
-
-    score = Math.min(100, Math.round(score));
+    let score = 0;
+    if (affected.length > 0) {
+      score = 10; // baseline
+      affected.forEach((n) => {
+        const baseWeight = critWeights[n.criticality] || 15;
+        const multiplier = sevWeights[selectedSeverity] || 1.0;
+        score += baseWeight * multiplier;
+      });
+      score = Math.min(100, Math.round(score));
+    }
     setRiskScore(score);
     setAffectedNodes(affected);
 
@@ -580,39 +592,45 @@ export const Simulation: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* AI Sourcing Recommendation & Suggested Companies */}
+              {/* AI Sourcing Recommendation & Suggested Companies */}
             <div className="border-2 border-emerald-500/30 bg-emerald-500/5 rounded-md p-4 space-y-3">
-              <div className="font-semibold text-[13px] text-primary flex items-center gap-1">
-                <CheckCircle size={14} className="text-emerald-600" /> Sourcing Recovery Recommendations
+              <div className="font-semibold text-[13px] text-emerald-700 flex items-center gap-1">
+                <CheckCircle size={14} className="text-emerald-600" /> Sourcing Status & Recommendations
               </div>
-              <p className="text-muted-foreground leading-relaxed text-[11.5px]">
-                {affectedNodes.length > 0
-                  ? `To recover your profit margins, source from candidate companies operating outside of ${selCountries.join(', ')}.`
-                  : 'Your active Tier-1 supply and distribution nodes appear insulated from this geographic disruption.'}
-              </p>
-
-              {alternateOrgs.length > 0 ? (
-                <div className="space-y-2 pt-1">
-                  <span className="text-[10px] mono-label text-emerald-700">Alternative Operators Suggested:</span>
-                  <div className="space-y-1.5">
-                    {alternateOrgs.map((alt) => (
-                      <div key={alt.id} className="bg-background border border-emerald-500/20 rounded p-2 flex justify-between items-center text-[12px]">
-                        <div>
-                          <span className="font-medium text-foreground">{alt.display_name}</span>
-                          <span className="text-[10px] text-muted-foreground block">{alt.industry || 'General Industry'} · {alt.country}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-emerald-600 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">Candidate</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : affectedNodes.some(n => n.type.toLowerCase().includes('supplier')) ? (
-                <p className="text-[11.5px] text-destructive/80 font-medium pt-1">
-                  No recommendations because there are no alternative suppliers with that product outside the disruption zone.
+              
+              {affectedNodes.length === 0 ? (
+                <p className="text-emerald-900 font-medium text-[13px]">
+                  You have no connections with the simulated countries/companies, so you are safe. No risk.
                 </p>
-              ) : null}
+              ) : (
+                <>
+                  <p className="text-muted-foreground leading-relaxed text-[11.5px]">
+                    To recover your profit margins, source from candidate companies operating outside of {selCountries.join(', ')}.
+                  </p>
+
+                  {alternateOrgs.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      <span className="text-[10px] mono-label text-emerald-700">Alternative Operators Suggested:</span>
+                      <div className="space-y-1.5">
+                        {alternateOrgs.map((alt) => (
+                          <div key={alt.id} className="bg-background border border-emerald-500/20 rounded p-2 flex justify-between items-center text-[12px]">
+                            <div>
+                              <span className="font-medium text-foreground">{alt.display_name}</span>
+                              <span className="text-[10px] text-muted-foreground block">{alt.industry || 'General Industry'} · {alt.country}</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-emerald-600 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">Candidate</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : affectedNodes.some(n => n.type.toLowerCase().includes('supplier')) ? (
+                    <p className="text-[11.5px] text-destructive/80 font-medium pt-1">
+                      No recommendations because there are no alternative suppliers with that product outside the disruption zone.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
             </div>
           </div>
         )}

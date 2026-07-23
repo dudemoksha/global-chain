@@ -186,16 +186,14 @@ function SimBody() {
     const kindMult = 0.5 + Math.min(selKinds.length, 5) * 0.15;
 
     let score = 0;
-    if (consumed.length > 0) {
+    if (impacted.length > 0 && consumed.length > 0) {
       const weighted = impacted.reduce(
         (acc, i) => acc + (CRIT_WEIGHT[i.criticality] ?? 0.5),
         0,
       );
       score = Math.min(100, Math.round((weighted / consumed.length) * 100 * sevW * kindMult));
     } else {
-      // General simulation score for empty/sandbox mode based on selected parameters
-      const countryFactor = Math.min(selCountries.length, 3) * 20;
-      score = Math.min(100, Math.round((countryFactor + 30) * sevW * kindMult));
+      score = 0;
     }
 
     // Generate signals across all selected countries
@@ -628,20 +626,11 @@ function SimBody() {
                     );
                   })
                 ) : (
-                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-3">
-                    <div className="mono-label !text-emerald-700">
-                      Alternate Suppliers & Mitigations
-                    </div>
-                    <p className="text-[13px] text-muted-foreground">
-                      Simulating disruption for <strong>{selCountries.join(", ")}</strong>. Cross-operator candidates operating outside these disruption zones:
+                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-5 space-y-2 text-emerald-800">
+                    <div className="mono-label !text-emerald-700">✓ Safe Status</div>
+                    <p className="text-[14px] font-medium text-emerald-900">
+                      You have no connections with the simulated countries/companies, so you are safe. No risk.
                     </p>
-                    <RecommendationsPanel
-                      title=""
-                      subtitle={`Alternate suppliers avoiding ${selCountries.join(", ")}`}
-                      avoidCountry={selCountries.join(",")}
-                      limit={5}
-                      compact
-                    />
                   </div>
                 )}
               </div>

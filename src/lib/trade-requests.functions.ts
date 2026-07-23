@@ -324,7 +324,7 @@ export const listMyCustomers = createServerFn({ method: "GET" })
     // Find everyone who buys from me
     const { data: rows, error } = await supabaseAdmin
       .from("suppliers")
-      .select("id, owner_id, category, criticality, notes, created_at")
+      .select("id, owner_id, category, criticality, notes, product, created_at")
       .eq("supplier_org_id", org.id)
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -342,6 +342,7 @@ export const listMyCustomers = createServerFn({ method: "GET" })
       category: r.category,
       criticality: r.criticality,
       notes: r.notes,
+      product: r.product,
       created_at: r.created_at,
       customer: byId.get(r.owner_id) ?? null,
     }));
