@@ -20,6 +20,7 @@ const DEFAULT_GLOBAL_COUNTRIES = [
 export const Simulation: React.FC = () => {
   const { user } = useAuth();
   const [nodes, setNodes] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [customCountries, setCustomCountries] = useState<string[]>([]);
   const [customCountryInput, setCustomCountryInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -46,11 +47,18 @@ export const Simulation: React.FC = () => {
     const fetchConnections = async () => {
       setLoading(true);
       try {
+        // Fetch inventory
+        const { data: inv } = await supabase
+          .from('inventory_items')
+          .select('id, name, price, unit')
+          .eq('owner_id', user.id);
+        setInventory(inv || []);
+
         // Fetch suppliers (inbound)
         const { data: sups, error: supErr } = await supabase
           .from('suppliers')
           .select(`
-            id, category, criticality, product,
+            id, category, criticality, product, annual_spend_bucket,
             organizations:supplier_org_id ( id, display_name, country, industry )
           `)
           .eq('owner_id', user.id);
@@ -90,7 +98,8 @@ export const Simulation: React.FC = () => {
               product: s.product || '',
               category: s.category || '',
               criticality: s.criticality || 'medium',
-              type: 'Supplier (Inbound)'
+              type: 'Supplier (Inbound)',
+              spend: s.annual_spend_bucket || 'N/A'
             });
           }
         });
@@ -108,7 +117,8 @@ export const Simulation: React.FC = () => {
               product: c.product || '',
               category: c.category || '',
               criticality: 'medium',
-              type: 'Customer (Outbound)'
+              type: 'Customer (Outbound)',
+              spend: 'N/A'
             });
           }
         });
@@ -194,16 +204,37 @@ export const Simulation: React.FC = () => {
     setRiskScore(score);
     setAffectedNodes(affected);
 
-    // Calculate dynamic financial loss & recovery metrics
-    let baseLoss = 25000;
-    if (affected.length > 0) {
-      const hasCritical = affected.some(n => n.criticality === 'critical');
-      const hasHigh = affected.some(n => n.criticality === 'high');
-      baseLoss = hasCritical ? 85000 : hasHigh ? 50000 : 35000;
+    // Calculate dynamic financial loss & recovery metrics in Rupees (Rs.)
+    let totalLoss = 0;
+    affected.forEach((o) => {
+      const matchedSku = (inventory || []).find(
+        (item) => item.name.toLowerCase() === o.product.toLowerCase()
+      );
+      const itemPrice = matchedSku ? Number(matchedSku.price || 100) : null;
+      
+      let baseLoss = 0;
+      if (o.type.toLowerCase().includes("supplier")) {
+        if (itemPrice) {
+          baseLoss = itemPrice * 12000; // default annual quantity
+        } else {
+          // Mapped spend bucket
+          if (o.spend === "<$100k") baseLoss = 80000;
+          else if (o.spend === "$100k-1M") baseLoss = 800000;
+          else if (o.spend === "$1M-10M") baseLoss = 8000000;
+          else if (o.spend === ">$10M") baseLoss = 25000000;
+          else baseLoss = 500000;
+        }
+      } else {
+        baseLoss = (itemPrice ? itemPrice : 150) * 8000;
+      }
+      const sevMult = selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6;
+      totalLoss += Math.round(baseLoss * sevMult);
+    });
+
+    if (affected.length === 0) {
+      totalLoss = 100000 * (selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6);
     }
-    const sevMult = selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6;
-    const calculatedLoss = Math.round(baseLoss * sevMult);
-    setLossEstimate(calculatedLoss);
+    setLossEstimate(totalLoss);
 
     let calculatedRecovery = 30;
     if (selectedKind === 'geopolitical') calculatedRecovery += 30;
@@ -218,21 +249,25 @@ export const Simulation: React.FC = () => {
 
     // Fetch alternative companies outside ALL selected countries using the backend recommendations engine
     try {
-      const firstAffected = affected[0];
-      const res = await recommendAlternatives({
-        industry: firstAffected?.industry || '',
-        category: firstAffected?.product || firstAffected?.category || '',
-        avoid_country: selCountries.join(','),
-        exclude_org_id: firstAffected?.orgId || null,
-        limit: 3
-      });
-      const mapped = (res || []).map((o: any) => ({
-        id: o.org_id,
-        display_name: o.name,
-        country: o.country,
-        industry: o.industry,
-      }));
-      setAlternateOrgs(mapped);
+      const firstAffected = affected.find(n => n.type.toLowerCase().includes('supplier'));
+      if (firstAffected) {
+        const res = await recommendAlternatives({
+          industry: firstAffected.industry || '',
+          category: firstAffected.product || firstAffected.category || '',
+          avoid_country: selCountries.join(','),
+          exclude_org_id: firstAffected.orgId || null,
+          limit: 3
+        });
+        const mapped = (res || []).map((o: any) => ({
+          id: o.org_id,
+          display_name: o.name,
+          country: o.country,
+          industry: o.industry,
+        }));
+        setAlternateOrgs(mapped);
+      } else {
+        setAlternateOrgs([]);
+      }
     } catch (e) {
       console.error(e);
       setAlternateOrgs([]);
@@ -486,15 +521,15 @@ export const Simulation: React.FC = () => {
                     <span className="font-semibold text-foreground">{recoveryTime} Days</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Estimated Profit Loss</span>
-                    <span className="font-semibold text-destructive">${lossEstimate.toLocaleString()} USD</span>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Estimated Loss</span>
+                    <span className="font-semibold text-destructive">Rs. {lossEstimate.toLocaleString()}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground block text-[10px] uppercase font-mono">Recovery Target Date</span>
                     <span className="font-semibold text-foreground">{recoveryDateString}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Profit Reset Horizon</span>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-mono">Margin Recovery Horizon</span>
                     <span className="font-semibold text-emerald-700">{recoveryTime + 30} Days</span>
                   </div>
                 </div>
@@ -506,18 +541,18 @@ export const Simulation: React.FC = () => {
                       <div key={node.id} className="pb-1 border-b border-dashed border-border/20 last:border-0 last:pb-0">
                         {isInbound ? (
                           <p>
-                            ⚠️ You procure <strong>{node.product || node.category || 'goods'}</strong> from <strong>{node.name}</strong> in <strong>{node.country}</strong>. Sourcing is simulated to halt. We recommend shifting procurement to candidate companies below to safeguard lines.
+                            ⚠️ <strong>Disruption Alert</strong>: A simulated disruption has occurred in <strong>{node.country}</strong>. You may have to change your supplier! Sourcing for <strong>{node.product || node.category || 'goods'}</strong> from <strong>{node.name}</strong> is halted. Alternate suppliers operating outside of {selCountries.join(', ')} are listed below.
                           </p>
                         ) : (
                           <p>
-                            ⚠️ You supply <strong>{node.product || node.category || 'goods'}</strong> to <strong>{node.name}</strong> in <strong>{node.country}</strong>. A regional threat here will stall delivery routes and interrupt sales flow. We suggest safety stock or alternate buyers.
+                            ⚠️ <strong>Disruption Alert</strong>: A simulated disruption has occurred in <strong>{node.country}</strong>. Delivery lines to customer <strong>{node.name}</strong> for <strong>{node.product || node.category || 'goods'}</strong> are disrupted. Please prepare safety stock or coordinate alternate distribution.
                           </p>
                         )}
                       </div>
                     );
                   })}
                   <p className="text-[10px] font-mono text-destructive font-medium pt-1">
-                    Estimated daily financial margin impact: <strong>-${Math.round(lossEstimate * 0.05).toLocaleString()} USD / day</strong>
+                    Estimated daily financial margin impact: <strong>-Rs. {Math.round(lossEstimate * 0.05).toLocaleString()} / day</strong>
                   </p>
                 </div>
               </div>
@@ -558,7 +593,7 @@ export const Simulation: React.FC = () => {
                   : 'Your active Tier-1 supply and distribution nodes appear insulated from this geographic disruption.'}
               </p>
 
-              {alternateOrgs.length > 0 && (
+              {alternateOrgs.length > 0 ? (
                 <div className="space-y-2 pt-1">
                   <span className="text-[10px] mono-label text-emerald-700">Alternative Operators Suggested:</span>
                   <div className="space-y-1.5">
@@ -573,7 +608,11 @@ export const Simulation: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              )}
+              ) : affectedNodes.some(n => n.type.toLowerCase().includes('supplier')) ? (
+                <p className="text-[11.5px] text-destructive/80 font-medium pt-1">
+                  No recommendations because there are no alternative suppliers with that product outside the disruption zone.
+                </p>
+              ) : null}
             </div>
           </div>
         )}

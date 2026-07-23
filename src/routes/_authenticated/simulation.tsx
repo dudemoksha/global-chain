@@ -5,6 +5,7 @@ import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import { listMySuppliers } from "@/lib/suppliers.functions";
 import { listMyCustomers } from "@/lib/trade-requests.functions";
+import { listInventory } from "@/lib/inventory.functions";
 import {
   generateSignals,
   severityColor,
@@ -23,6 +24,10 @@ const customersQuery = queryOptions({
   queryKey: ["customers", "mine"],
   queryFn: () => listMyCustomers(),
 });
+const inventoryQuery = queryOptions({
+  queryKey: ["inventory", "mine"],
+  queryFn: () => listInventory(),
+});
 
 export const Route = createFileRoute("/_authenticated/simulation")({
   head: () => ({
@@ -37,6 +42,7 @@ export const Route = createFileRoute("/_authenticated/simulation")({
       await Promise.all([
         context.queryClient.ensureQueryData(suppliersQuery).catch(() => []),
         context.queryClient.ensureQueryData(customersQuery).catch(() => []),
+        context.queryClient.ensureQueryData(inventoryQuery).catch(() => []),
       ]);
     }
     return null;
@@ -87,6 +93,7 @@ const SEV_WEIGHT: Record<Severity, number> = { critical: 1, high: 0.75, medium: 
 function SimBody() {
   const { data: suppliers } = useSuspenseQuery(suppliersQuery);
   const { data: customers } = useSuspenseQuery(customersQuery);
+  const { data: inventory } = useSuspenseQuery(inventoryQuery);
 
   // Combine both suppliers (inbound) and customers (outbound)
   const consumed = useMemo(() => {
@@ -509,8 +516,28 @@ function SimBody() {
               <div className="space-y-4">
                 {result.impacted.length > 0 ? (
                   result.impacted.map((o) => {
-                    // Calculate dynamic metrics based on simulation inputs
-                    const baseLoss = o.criticality === "critical" ? 85000 : o.criticality === "high" ? 50000 : 25000;
+                    const matchedSku = (inventory || []).find(
+                      (item) => item.name.toLowerCase() === o.product.toLowerCase()
+                    );
+                    const itemPrice = matchedSku ? Number(matchedSku.price || 100) : null;
+                    
+                    let baseLoss = 0;
+                    if (o.type.toLowerCase().includes("supplier")) {
+                      if (itemPrice) {
+                        baseLoss = itemPrice * 12000; // default annual quantity
+                      } else {
+                        // Mapped spend bucket
+                        if (o.spend === "<$100k") baseLoss = 80000;
+                        else if (o.spend === "$100k-1M") baseLoss = 800000;
+                        else if (o.spend === "$1M-10M") baseLoss = 8000000;
+                        else if (o.spend === ">$10M") baseLoss = 25000000;
+                        else baseLoss = 500000;
+                      }
+                    } else {
+                      // Customer loss: default quantity 8000
+                      baseLoss = (itemPrice ? itemPrice : 150) * 8000;
+                    }
+
                     const sevMult = severity === "critical" ? 1.5 : severity === "high" ? 1.0 : 0.6;
                     const lossEstimate = Math.round(baseLoss * sevMult);
 
@@ -526,23 +553,24 @@ function SimBody() {
 
                     return (
                       <div key={o.id} className="space-y-3">
-                        {/* Impacted item — red box */}
+                        {/* Notification / Disruption alert */}
                         <div className="rounded-md border-2 border-destructive/40 bg-destructive/10 p-4">
                           <div className="flex items-baseline justify-between gap-3">
                             <div>
                               <div className="mono-label !text-destructive">
-                                Impacted {o.type.toLowerCase().includes("supplier") ? "inbound supplier" : "outbound customer"}
+                                ⚠️ Disruption Alert ({o.type.toLowerCase().includes("supplier") ? "Supplier Sourcing" : "Customer Delivery"})
                               </div>
-                              <div className="mt-1 text-[14.5px] font-medium">
-                                {o.product || o.category || "Unspecified product"}
-                              </div>
-                              <div className="mono-label mt-0.5">
-                                {o.type} · {o.orgName}
-                                {o.country ? ` · ${o.country}` : ""}
-                              </div>
-                            </div>
-                            <div className="rounded-sm border border-destructive/40 bg-background px-1.5 py-0.5 text-[11px] capitalize text-destructive">
-                              {o.criticality}
+                              <p className="mt-1.5 text-[13px] text-foreground leading-relaxed">
+                                {o.type.toLowerCase().includes("supplier") ? (
+                                  <>
+                                    A simulated disruption has occurred in <strong>{o.country}</strong>. You may have to change your supplier! Sourcing for <strong>{o.product || o.category || "materials"}</strong> from <strong>{o.orgName}</strong> is halted. Alternate suppliers operating outside of {selCountries.join(", ")} are listed below.
+                                  </>
+                                ) : (
+                                  <>
+                                    A simulated disruption has occurred in <strong>{o.country}</strong>. Delivery lines to customer <strong>{o.orgName}</strong> for <strong>{o.product || o.category || "products"}</strong> are disrupted. Please prepare safety stock or coordinate alternate distribution.
+                                  </>
+                                )}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -556,53 +584,46 @@ function SimBody() {
                               <span className="font-semibold text-foreground text-[14px]">{recoveryTime} Days</span>
                             </div>
                             <div>
-                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Estimated Profit Loss</span>
-                              <span className="font-semibold text-destructive text-[14px]">${lossEstimate.toLocaleString()} USD</span>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Estimated Financial Loss</span>
+                              <span className="font-semibold text-destructive text-[14px]">Rs. {lossEstimate.toLocaleString()}</span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Recovery Target Date</span>
                               <span className="font-semibold text-foreground text-[14px]">{recoveryDateString}</span>
                             </div>
                             <div>
-                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Profit Recovery Horizon</span>
-                              <span className="font-semibold text-emerald-700 text-[14px]">{recoveryTime + 30} Days to Profit Reset</span>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-mono">Margin Recovery Horizon</span>
+                              <span className="font-semibold text-emerald-700 text-[14px]">{recoveryTime + 30} Days to Reset</span>
                             </div>
                           </div>
                           
                           <div className="text-[12px] text-muted-foreground leading-relaxed pt-1.5 border-t border-border/20 space-y-1.5">
-                            {o.type.toLowerCase().includes("supplier") ? (
-                              <p>
-                                ⚠️ You are procuring <strong>{o.product || o.category || "materials"}</strong> from <strong>{o.orgName}</strong> in <strong>{o.country}</strong> (Annual spend: {o.spend}). Since this region is affected, you risk a supply halt. We recommend shifting procurement to one of the candidates below to protect your product lines.
-                              </p>
-                            ) : (
-                              <p>
-                                ⚠️ You are supplying <strong>{o.product || o.category || "materials"}</strong> to <strong>{o.orgName}</strong> in <strong>{o.country}</strong>. A regional threat here will stall delivery routes and interrupt your sales flow. We suggest holding buffer stock, negotiating temporary storage, or finding backup buyers.
-                              </p>
-                            )}
                             <p className="text-[11px] font-mono text-destructive">
-                              Estimated daily financial margin impact: <strong>-${Math.round(lossEstimate * 0.05).toLocaleString()} USD / day</strong>
+                              Estimated daily financial margin impact: <strong>-Rs. {Math.round(lossEstimate * 0.05).toLocaleString()} / day</strong>
                             </p>
                           </div>
                         </div>
 
                         {/* Recommendations — green box */}
-                        <div className="rounded-md border-2 border-emerald-500/40 bg-emerald-500/10 p-4">
-                          <div className="mono-label !text-emerald-700">
-                            Recommended alternatives
+                        {o.type.toLowerCase().includes("supplier") && (
+                          <div className="rounded-md border-2 border-emerald-500/40 bg-emerald-500/10 p-4">
+                            <div className="mono-label !text-emerald-700">
+                              Recommended alternatives
+                            </div>
+                            <div className="mt-2">
+                              <RecommendationsPanel
+                                title=""
+                                subtitle={`Cross-operator matches, avoiding ${selCountries.join(", ")}.`}
+                                industry={o.industry}
+                                category={o.product || o.category}
+                                avoidCountry={selCountries.join(",")}
+                                excludeOrgId={o.orgId}
+                                limit={5}
+                                compact
+                              />
+                            </div>
                           </div>
-                          <div className="mt-2">
-                        <RecommendationsPanel
-                              title=""
-                              subtitle={`Cross-operator matches, avoiding ${selCountries.join(", ")}.`}
-                              industry={o.industry}
-                              category={o.product || o.category}
-                              avoidCountry={selCountries.join(",")}
-                              excludeOrgId={o.orgId}
-                              limit={5}
-                              compact
-                            />
-                          </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })

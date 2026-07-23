@@ -76,8 +76,8 @@ export function RecommendationsPanel({
           Couldn't load recommendations.
         </p>
       ) : !q.data || q.data.length === 0 ? (
-        <p className="mt-3 text-[13px] text-muted-foreground">
-          No cross-operator matches yet. As more operators declare suppliers in this category, alternates surface here automatically.
+        <p className="mt-3 text-[13px] text-destructive/80 font-medium">
+          No recommendations because there are no alternative suppliers with that product outside the disruption zone.
         </p>
       ) : (
         <ul className="mt-4 space-y-2.5">
