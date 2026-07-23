@@ -811,6 +811,10 @@ function AdminDashboard() {
   const { data: profiles } = useSuspenseQuery(adminProfilesQuery);
   const { data: users } = useSuspenseQuery(adminUsersQuery);
 
+  // Exclude admin accounts from all counts and lists — admins are not companies
+  const adminIds = new Set(users.filter((u: any) => u.is_admin).map((u: any) => u.id));
+  const nonAdminProfiles = profiles.filter((p: any) => !adminIds.has(p.id));
+
   const listResetRequestsFn = useServerFn(listPasswordResetRequests);
 
   const { data: resets, refetch: refetchResets } = useQuery({
@@ -818,9 +822,9 @@ function AdminDashboard() {
     queryFn: async () => listResetRequestsFn(),
   });
 
-  const pending = profiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
-  const approved = profiles.filter((p) => p.is_approved).length;
-  const rejected = profiles.filter((p) => !p.is_approved && p.reviewed_at).length;
+  const pending = nonAdminProfiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
+  const approved = nonAdminProfiles.filter((p) => p.is_approved).length;
+  const rejected = nonAdminProfiles.filter((p) => !p.is_approved && p.reviewed_at).length;
   const pendingResets = (resets || []).filter((r: any) => r.status === "pending").length;
 
   const ADMIN_TABS: { id: AdminTab; label: string; badge?: number }[] = [
@@ -871,13 +875,13 @@ function AdminDashboard() {
         {tab === "overview" && (
           <AdminOverview
             stats={stats}
-            profiles={profiles}
+            profiles={nonAdminProfiles}
             pending={pending}
             approved={approved}
             rejected={rejected}
           />
         )}
-        {tab === "approvals" && <AdminApprovals profiles={profiles} />}
+        {tab === "approvals" && <AdminApprovals profiles={nonAdminProfiles} />}
         {tab === "resets" && <AdminResets resets={resets || []} onResolve={refetchResets} />}
         {tab === "users" && <AdminUsers users={users} />}
         {tab === "activity" && <AdminActivity profiles={profiles} users={users} />}

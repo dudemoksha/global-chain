@@ -56,10 +56,22 @@ export const platformStats = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     await assertAdmin(supabase, userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Get all admin user IDs so we can exclude them from company counts
+    const { data: adminRoles } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin");
+    const adminIds = (adminRoles ?? []).map((r: { user_id: string }) => r.user_id);
+
     const [{ count: companies }, { count: approved }, { count: suppliers }, { count: alerts }] =
       await Promise.all([
-        supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }),
-        supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).eq("is_approved", true),
+        adminIds.length > 0
+          ? supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).not("id", "in", `(${adminIds.join(",")})`)
+          : supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }),
+        adminIds.length > 0
+          ? supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).eq("is_approved", true).not("id", "in", `(${adminIds.join(",")})`)
+          : supabaseAdmin.from("profiles").select("id", { count: "exact", head: true }).eq("is_approved", true),
         supabaseAdmin.from("suppliers").select("id", { count: "exact", head: true }),
         supabaseAdmin.from("alerts").select("id", { count: "exact", head: true }),
       ]);
@@ -70,3 +82,4 @@ export const platformStats = createServerFn({ method: "GET" })
       alerts: alerts ?? 0,
     };
   });
+

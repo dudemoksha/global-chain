@@ -104,9 +104,14 @@ export const Dashboard: React.FC = () => {
           getPlatformStats().catch(async (err) => {
             console.warn('getPlatformStats failed, falling back to direct db select:', err);
             try {
+              const adminIds = (await supabase.from('user_roles').select('user_id').eq('role', 'admin')).data?.map((r: any) => r.user_id) || [];
               const [{ count: companiesCount }, { count: approvedCount }, { count: suppliersCount }] = await Promise.all([
-                supabase.from('profiles').select('*', { count: 'exact', head: true }),
-                supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_approved', true),
+                adminIds.length > 0
+                  ? supabase.from('profiles').select('*', { count: 'exact', head: true }).not('id', 'in', `(${adminIds.join(',')})`)
+                  : supabase.from('profiles').select('*', { count: 'exact', head: true }),
+                adminIds.length > 0
+                  ? supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_approved', true).not('id', 'in', `(${adminIds.join(',')})`)
+                  : supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_approved', true),
                 supabase.from('suppliers').select('*', { count: 'exact', head: true }),
               ]);
               const { count: alertsCount } = await supabase.from('alerts').select('*', { count: 'exact', head: true });
@@ -448,19 +453,22 @@ export const Dashboard: React.FC = () => {
     });
   }, [usersList, userSearch, roleFilter]);
 
-  // Profiles count metrics
-  const pendingCount = profiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
-  const approvedCount = profiles.filter((p) => p.is_approved).length;
-  const rejectedCount = profiles.filter((p) => !p.is_approved && p.reviewed_at).length;
+  // Profiles count metrics — exclude admin accounts from all company counts
+  const adminUserIds = new Set(usersList.filter((u: any) => u.is_admin).map((u: any) => u.id));
+  const nonAdminProfiles = profiles.filter((p: any) => !adminUserIds.has(p.id));
+
+  const pendingCount = nonAdminProfiles.filter((p) => !p.is_approved && !p.reviewed_at).length;
+  const approvedCount = nonAdminProfiles.filter((p) => p.is_approved).length;
+  const rejectedCount = nonAdminProfiles.filter((p) => !p.is_approved && p.reviewed_at).length;
 
   const topCountries = useMemo(() => {
     const m = new Map<string, number>();
-    profiles.forEach((p) => {
+    nonAdminProfiles.forEach((p) => {
       const c = (p.hq_country || 'Unknown').trim() || 'Unknown';
       m.set(c, (m.get(c) ?? 0) + 1);
     });
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [profiles]);
+  }, [nonAdminProfiles]);
 
   if (loading) {
     return (
@@ -545,11 +553,11 @@ export const Dashboard: React.FC = () => {
               {/* Recent Operator Registrations */}
               <div className="border border-border bg-card rounded-md p-4 space-y-3">
                 <h4 className="text-[13px] font-medium text-foreground">Recent Registrations</h4>
-                {profiles.slice(0, 5).length === 0 ? (
+                {nonAdminProfiles.slice(0, 5).length === 0 ? (
                   <p className="text-[12px] text-muted-foreground">No signups found.</p>
                 ) : (
                   <div className="divide-y divide-border">
-                    {profiles.slice(0, 5).map((p) => (
+                    {nonAdminProfiles.slice(0, 5).map((p) => (
                       <div key={p.id} className="py-2.5 flex justify-between items-center text-[12.5px]">
                         <div>
                           <div className="font-medium">{p.legal_name || 'Individual'}</div>
@@ -602,7 +610,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {profiles.filter((p) => !p.is_approved && !p.reviewed_at).map((p) => (
+                  {nonAdminProfiles.filter((p) => !p.is_approved && !p.reviewed_at).map((p) => (
                     <div key={p.id} className="border border-border bg-card rounded-md p-4 space-y-3">
                       <div>
                         <div className="text-[14px] font-medium">{p.full_name}</div>
