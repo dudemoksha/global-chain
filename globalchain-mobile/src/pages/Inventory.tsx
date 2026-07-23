@@ -97,8 +97,7 @@ export const Inventory: React.FC = () => {
 
     try {
       const sku = await generateSku();
-      const { error } = await supabase
-        .from('inventory_items')
+      const { error } = await (supabase.from('inventory_items') as any)
         .insert({
           owner_id: user.id,
           sku,
@@ -146,8 +145,7 @@ export const Inventory: React.FC = () => {
     setFormBusy(true);
 
     try {
-      const { error } = await supabase
-        .from('inventory_items')
+      const { error } = await (supabase.from('inventory_items') as any)
         .update({
           name,
           unit,

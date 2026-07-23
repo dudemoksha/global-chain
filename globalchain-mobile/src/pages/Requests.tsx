@@ -220,11 +220,11 @@ export const Requests: React.FC = () => {
       return;
     }
     try {
-      const { data, error } = await supabase.rpc('search_products_by_name', {
+      const { data, error } = await (supabase as any).rpc('search_products_by_name', {
         _query: val.trim()
       });
       if (!error && data) {
-        setMatchingProds(data);
+        setMatchingProds((data || []) as any[]);
       }
     } catch (e) {
       console.error('Error searching products:', e);
