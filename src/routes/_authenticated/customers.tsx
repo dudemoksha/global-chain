@@ -4,14 +4,14 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import {
   listMyCustomers,
   sendTradeRequest,
 } from "@/lib/trade-requests.functions";
-import { OrgAutocomplete, ProductAutocomplete } from "./suppliers";
+import { OrgAutocomplete } from "./suppliers";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const customersQuery = queryOptions({
@@ -200,10 +200,38 @@ function ProposeCustomerDialog({
   const [category, setCategory] = useState("");
   const [message, setMessage] = useState("");
 
+  // Load the current user's own inventory SKUs
+  const [mySkus, setMySkus] = useState<Array<{ id: string; name: string; sku: string; unit: string; price: string }>>([]);
+  const [loadingSkus, setLoadingSkus] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from("inventory_items")
+          .select("id, name, sku, unit, price")
+          .eq("owner_id", user.id)
+          .order("name");
+        setMySkus(data || []);
+      } catch (e) {
+        console.error("Error loading inventory:", e);
+      } finally {
+        setLoadingSkus(false);
+      }
+    })();
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!orgId) {
       setErr("Pick a customer organisation from the dropdown.");
+      return;
+    }
+    if (!product.trim()) {
+      setErr("Select a SKU you want to offer.");
       return;
     }
     setBusy(true);
@@ -228,9 +256,9 @@ function ProposeCustomerDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/20 p-6 backdrop-blur-[1px]">
-      <div className="w-full max-w-2xl rounded-md border border-border bg-background shadow-xl animate-rise">
-        <header className="flex items-center justify-between border-b border-border px-6 py-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-6 backdrop-blur-[1px]">
+      <div className="w-full max-w-2xl rounded-md border border-border bg-background shadow-xl animate-rise max-h-[90vh] overflow-y-auto">
+        <header className="flex items-center justify-between border-b border-border px-6 py-3 sticky top-0 bg-background z-10">
           <span className="mono-label">§ Propose to a customer</span>
           <button type="button" onClick={onClose} className="text-[13px] text-muted-foreground hover:text-foreground">
             Close ✕
@@ -245,37 +273,50 @@ function ProposeCustomerDialog({
           </div>
         ) : (
           <form onSubmit={submit} className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+            {/* Step 1: Pick from OWN inventory SKUs */}
             <div className="sm:col-span-2">
-              <div className="mono-label mb-1.5">Search by Product Name (quick setup)</div>
-              <ProductAutocomplete
-                onPick={(p) => {
-                  setOrgId(p.org_id);
-                  setProduct(p.product_name);
-                  setCategory(p.product_name);
-                }}
-              />
+              <div className="mono-label mb-1.5">Your SKU / Product you're offering</div>
+              <p className="text-[11.5px] text-muted-foreground mb-2">
+                Select from your own inventory — you can only offer what you have.
+              </p>
+              {loadingSkus ? (
+                <div className="rounded-md border border-border px-3 py-2.5 text-[13px] text-muted-foreground">
+                  Loading your inventory…
+                </div>
+              ) : mySkus.length === 0 ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-[13px] text-destructive">
+                  You have no SKUs in your inventory yet. Add items under <strong>Inventory</strong> first.
+                </div>
+              ) : (
+                <select
+                  value={product}
+                  onChange={(e) => {
+                    const sku = mySkus.find(s => s.name === e.target.value);
+                    setProduct(e.target.value);
+                    if (sku) setCategory(sku.name);
+                  }}
+                  required
+                  className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
+                >
+                  <option value="">— select a SKU to offer —</option>
+                  {mySkus.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} ({s.sku}) — {s.unit}{s.price ? ` · Rs. ${s.price}` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            <div className="sm:col-span-2 flex items-center justify-center">
-              <span className="h-px bg-border flex-1"></span>
-              <span className="mx-3 text-[11px] mono-label text-muted-foreground">OR SELECT MANUALLY</span>
-              <span className="h-px bg-border flex-1"></span>
-            </div>
-
+            {/* Step 2: Find the target customer org */}
             <div className="sm:col-span-2">
-              <div className="mono-label mb-1.5">Customer organisation</div>
+              <div className="mono-label mb-1.5">Target customer organisation</div>
+              <p className="text-[11.5px] text-muted-foreground mb-2">
+                Search for the company you want to sell to.
+              </p>
               <OrgAutocomplete onPick={(o) => setOrgId(o.id)} />
             </div>
-            <label className="block sm:col-span-2">
-              <div className="mono-label mb-1.5">Product / SKU you're offering</div>
-              <input
-                value={product}
-                onChange={(e) => setProduct(e.target.value)}
-                placeholder="e.g. Grade-A cotton yarn, 25 µm aluminium foil"
-                required
-                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none focus:border-foreground"
-              />
-            </label>
+
             <label className="block">
               <div className="mono-label mb-1.5">Quantity available</div>
               <input

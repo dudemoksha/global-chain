@@ -31,7 +31,7 @@ export const Suppliers: React.FC = () => {
 
   const fetchSuppliersAndWatches = async () => {
     if (!user) return;
-    setLoading(true);
+    if (suppliers.length === 0) setLoading(true);
 
     try {
       const [supRes, watchRes] = await Promise.all([
@@ -62,9 +62,16 @@ export const Suppliers: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchSuppliersAndWatches();
-    const interval = setInterval(fetchSuppliersAndWatches, 5000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`suppliers:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers', filter: `owner_id=eq.${user.id}` }, fetchSuppliersAndWatches)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'supplier_watches', filter: `user_id=eq.${user.id}` }, fetchSuppliersAndWatches)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   // Toggle Pinned / Watched Status
@@ -388,7 +395,7 @@ export const Suppliers: React.FC = () => {
       {/* Add Supplier Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[88vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <h3 className="text-[15px] font-display font-medium">Add Supplier Node</h3>
               <button onClick={() => setShowAddModal(false)} className="text-muted-foreground">
@@ -512,7 +519,7 @@ export const Suppliers: React.FC = () => {
       {/* Edit Supplier Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[88vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <h3 className="text-[15px] font-display font-medium">Edit Supplier Details</h3>
               <button onClick={() => setShowEditModal(false)} className="text-muted-foreground">

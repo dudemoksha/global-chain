@@ -33,19 +33,129 @@ export const Simulation: React.FC = () => {
   const [simulated, setSimulated] = useState(false);
 
   // Simulation Results
-  const [riskScore, setRiskScore] = useState(0);
-  const [affectedNodes, setAffectedNodes] = useState<any[]>([]);
   const [alternateOrgs, setAlternateOrgs] = useState<any[]>([]);
 
-  // Financial Loss & Recovery States
-  const [lossEstimate, setLossEstimate] = useState(0);
-  const [recoveryTime, setRecoveryTime] = useState(0);
-  const [recoveryDateString, setRecoveryDateString] = useState('');
+  // Compute simulation results reactively based on configuration changes
+  const simulationResult = useMemo(() => {
+    if (!simulated) return { riskScore: 0, affectedNodes: [], lossEstimate: 0, recoveryTime: 0, recoveryDateString: '' };
+
+    const lowerSelected = selCountries.map(c => c.toLowerCase().trim());
+
+    // Filter nodes in the target countries or target specific companies
+    const affected = nodes.filter((n) => {
+      const country = (n.country || '').toLowerCase().trim();
+      const countryMatches = lowerSelected.some(sel => 
+        country === sel || 
+        (sel === 'india' && country === 'inida') || 
+        (sel === 'inida' && country === 'india')
+      );
+      const companyMatches = selCompanyIds.includes(n.orgId);
+      return countryMatches || companyMatches;
+    });
+
+    // Calculate simulated risk score (0-100)
+    const critWeights: Record<string, number> = { critical: 40, high: 25, medium: 15, low: 5 };
+    const sevWeights: Record<string, number> = { critical: 1.5, high: 1.0, medium: 0.6 };
+
+    let score = 0;
+    if (affected.length > 0) {
+      score = 10; // baseline
+      affected.forEach((n) => {
+        const baseWeight = critWeights[n.criticality] || 15;
+        const multiplier = sevWeights[selectedSeverity] || 1.0;
+        score += baseWeight * multiplier;
+      });
+      score = Math.min(100, Math.round(score));
+    }
+
+    // Calculate dynamic financial loss & recovery metrics in Rupees (Rs.)
+    let totalLoss = 0;
+    affected.forEach((o) => {
+      const matchedSku = (inventory || []).find(
+        (item) => item.name.toLowerCase() === o.product.toLowerCase()
+      );
+      const itemPrice = matchedSku ? Number(matchedSku.price || 100) : null;
+      
+      let baseLoss = 0;
+      if (o.type.toLowerCase().includes("supplier")) {
+        if (itemPrice) {
+          baseLoss = itemPrice * 12000; // default annual quantity
+        } else {
+          // Mapped spend bucket
+          if (o.spend === "<$100k") baseLoss = 80000;
+          else if (o.spend === "$100k-1M") baseLoss = 800000;
+          else if (o.spend === "$1M-10M") baseLoss = 8000000;
+          else if (o.spend === ">$10M") baseLoss = 25000000;
+          else baseLoss = 500000;
+        }
+      } else {
+        baseLoss = (itemPrice ? itemPrice : 150) * 8000;
+      }
+      const sevMult = selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6;
+      totalLoss += Math.round(baseLoss * sevMult);
+    });
+
+    if (affected.length === 0) {
+      totalLoss = 100000 * (selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6);
+    }
+
+    let calculatedRecovery = 30;
+    if (selectedKind === 'geopolitical') calculatedRecovery += 30;
+    if (selectedKind === 'logistics') calculatedRecovery += 15;
+    if (selectedSeverity === 'critical') calculatedRecovery += 30;
+    else if (selectedSeverity === 'high') calculatedRecovery += 15;
+
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + calculatedRecovery);
+    const dateStr = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    return {
+      riskScore: score,
+      affectedNodes: affected,
+      lossEstimate: totalLoss,
+      recoveryTime: calculatedRecovery,
+      recoveryDateString: dateStr
+    };
+  }, [simulated, selCountries, selCompanyIds, selectedSeverity, selectedKind, nodes, inventory]);
+
+  const { riskScore, affectedNodes, lossEstimate, recoveryTime, recoveryDateString } = simulationResult;
+
+  // Reactively fetch alternative operators when affected nodes change
+  useEffect(() => {
+    const fetchAlts = async () => {
+      const affectedSuppliers = affectedNodes.filter(n => n.type.toLowerCase().includes('supplier'));
+      if (affectedSuppliers.length > 0 && user) {
+        try {
+          const firstAffected = affectedSuppliers[0];
+          const res = await recommendAlternatives({
+            industry: firstAffected.industry || '',
+            category: firstAffected.product || firstAffected.category || '',
+            avoid_country: selCountries.join(','),
+            exclude_org_id: firstAffected.orgId || null,
+            limit: 3
+          });
+          const mapped = (res || []).map((o: any) => ({
+            id: o.org_id,
+            display_name: o.name,
+            country: o.country,
+            industry: o.industry,
+          }));
+          setAlternateOrgs(mapped);
+        } catch (e) {
+          console.error(e);
+          setAlternateOrgs([]);
+        }
+      } else {
+        setAlternateOrgs([]);
+      }
+    };
+    fetchAlts();
+  }, [affectedNodes, user]);
 
   useEffect(() => {
     if (!user) return;
     const fetchConnections = async () => {
-      setLoading(true);
+      if (nodes.length === 0) setLoading(true);
       try {
         // Fetch inventory
         const { data: inv } = await supabase
@@ -141,6 +251,14 @@ export const Simulation: React.FC = () => {
       }
     };
     fetchConnections();
+
+    // Realtime — re-fetch when suppliers table changes for this user
+    const channel = supabase
+      .channel(`sim_suppliers:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers', filter: `owner_id=eq.${user.id}` }, fetchConnections)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, profile]);
 
   // Unique list of countries combined with custom countries
@@ -184,107 +302,6 @@ export const Simulation: React.FC = () => {
 
   const runSimulation = async () => {
     if ((selCountries.length === 0 && selCompanyIds.length === 0) || !user) return;
-
-    const lowerSelected = selCountries.map(c => c.toLowerCase().trim());
-
-    // Filter nodes in the target countries or target specific companies
-    const affected = nodes.filter((n) => {
-      const country = (n.country || '').toLowerCase().trim();
-      const countryMatches = lowerSelected.some(sel => 
-        country === sel || 
-        (sel === 'india' && country === 'inida') || 
-        (sel === 'inida' && country === 'india')
-      );
-      const companyMatches = selCompanyIds.includes(n.orgId);
-      return countryMatches || companyMatches;
-    });
-
-    // Calculate simulated risk score (0-100)
-    const critWeights: Record<string, number> = { critical: 40, high: 25, medium: 15, low: 5 };
-    const sevWeights: Record<string, number> = { critical: 1.5, high: 1.0, medium: 0.6 };
-
-    let score = 0;
-    if (affected.length > 0) {
-      score = 10; // baseline
-      affected.forEach((n) => {
-        const baseWeight = critWeights[n.criticality] || 15;
-        const multiplier = sevWeights[selectedSeverity] || 1.0;
-        score += baseWeight * multiplier;
-      });
-      score = Math.min(100, Math.round(score));
-    }
-    setRiskScore(score);
-    setAffectedNodes(affected);
-
-    // Calculate dynamic financial loss & recovery metrics in Rupees (Rs.)
-    let totalLoss = 0;
-    affected.forEach((o) => {
-      const matchedSku = (inventory || []).find(
-        (item) => item.name.toLowerCase() === o.product.toLowerCase()
-      );
-      const itemPrice = matchedSku ? Number(matchedSku.price || 100) : null;
-      
-      let baseLoss = 0;
-      if (o.type.toLowerCase().includes("supplier")) {
-        if (itemPrice) {
-          baseLoss = itemPrice * 12000; // default annual quantity
-        } else {
-          // Mapped spend bucket
-          if (o.spend === "<$100k") baseLoss = 80000;
-          else if (o.spend === "$100k-1M") baseLoss = 800000;
-          else if (o.spend === "$1M-10M") baseLoss = 8000000;
-          else if (o.spend === ">$10M") baseLoss = 25000000;
-          else baseLoss = 500000;
-        }
-      } else {
-        baseLoss = (itemPrice ? itemPrice : 150) * 8000;
-      }
-      const sevMult = selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6;
-      totalLoss += Math.round(baseLoss * sevMult);
-    });
-
-    if (affected.length === 0) {
-      totalLoss = 100000 * (selectedSeverity === 'critical' ? 1.5 : selectedSeverity === 'high' ? 1.0 : 0.6);
-    }
-    setLossEstimate(totalLoss);
-
-    let calculatedRecovery = 30;
-    if (selectedKind === 'geopolitical') calculatedRecovery += 30;
-    if (selectedKind === 'logistics') calculatedRecovery += 15;
-    if (selectedSeverity === 'critical') calculatedRecovery += 30;
-    else if (selectedSeverity === 'high') calculatedRecovery += 15;
-    setRecoveryTime(calculatedRecovery);
-
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + calculatedRecovery);
-    setRecoveryDateString(targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
-
-    // Fetch alternative companies outside ALL selected countries using the backend recommendations engine
-    try {
-      const firstAffected = affected.find(n => n.type.toLowerCase().includes('supplier'));
-      if (firstAffected) {
-        const res = await recommendAlternatives({
-          industry: firstAffected.industry || '',
-          category: firstAffected.product || firstAffected.category || '',
-          avoid_country: selCountries.join(','),
-          exclude_org_id: firstAffected.orgId || null,
-          limit: 3
-        });
-        const mapped = (res || []).map((o: any) => ({
-          id: o.org_id,
-          display_name: o.name,
-          country: o.country,
-          industry: o.industry,
-        }));
-        setAlternateOrgs(mapped);
-      } else {
-        setAlternateOrgs([]);
-      }
-    } catch (e) {
-      console.error(e);
-      setAlternateOrgs([]);
-    }
-
     setSimulated(true);
 
     // Write real alerts to Supabase alerts table so both website & app sync!
@@ -295,7 +312,7 @@ export const Simulation: React.FC = () => {
     
     selCountries.forEach((country) => {
       const detail = `A simulated stress test scenario of severity ${selectedSeverity} has been initiated for region/node ${country}.`;
-      const countryAffected = affected.filter(n => (n.country || '').toLowerCase() === country.toLowerCase());
+      const countryAffected = affectedNodes.filter(n => (n.country || '').toLowerCase() === country.toLowerCase());
 
       if (countryAffected.length > 0) {
         countryAffected.forEach((node) => {

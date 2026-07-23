@@ -30,6 +30,9 @@ export const SERVER_FN_HASHES = {
   listPasswordResetRequests: '592cf381a5308833f79b018ae3c32cc2965131525b7524fb2659a64b44e9b51f',
   approvePasswordResetRequest: '5edc8a68ed35d3c7d0f4efdf5c754cda8ac78c601ab0a5b33e7588911aafdbec',
   rejectPasswordResetRequest: '2631d60a26df60bd92568d5409d5054ffc9856fc043bcbbad76b065d9821e0d9',
+  getInventoryRisks: '44999d1b70bfc143c30ba7087800920412f8644a6c67bd546d073214a674954d',
+  listOrgProducts: '80092a32e1dfbd7b601c9fd5a9018dc9cf6ac370b4fa7f09c308e655fadf2256',
+  sendTradeRequest: '7625d7146703065f5a8839566c780a62505c8886de344fad98515f9f25716393',
 };
 
 function serializeToSeroval(value: any): any {
@@ -320,4 +323,23 @@ export const approvePasswordResetRequest = async (data: { requestId: string; tem
 
 export const rejectPasswordResetRequest = async (data: { requestId: string }) => {
   return callServerFn(SERVER_FN_HASHES.rejectPasswordResetRequest, data);
+};
+
+export const getInventoryRisks = async () => {
+  return callServerFn(SERVER_FN_HASHES.getInventoryRisks, {}, 'GET');
+};
+
+export const listOrgProducts = async (data: { org_id: string }) => {
+  return callServerFn(SERVER_FN_HASHES.listOrgProducts, data);
+};
+
+export const sendTradeRequest = async (data: {
+  to_org_id: string;
+  direction: 'buy' | 'sell';
+  product: string;
+  quantity?: string;
+  category?: string;
+  message?: string;
+}) => {
+  return callServerFn(SERVER_FN_HASHES.sendTradeRequest, data);
 };

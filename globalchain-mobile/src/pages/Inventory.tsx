@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Search, Trash2, Edit2, X, AlertTriangle, CheckCircle, Package } from 'lucide-react';
+import { getInventoryRisks } from '../lib/server-fns';
 
 export const Inventory: React.FC = () => {
   const { user } = useAuth();
   const [inventory, setInventory] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [risks, setRisks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -31,9 +33,9 @@ export const Inventory: React.FC = () => {
 
   const fetchData = async () => {
     if (!user) return;
-    setLoading(true);
+    if (inventory.length === 0) setLoading(true);
     try {
-      const [invRes, whRes] = await Promise.all([
+      const [invRes, whRes, riskRes] = await Promise.all([
         supabase
           .from('inventory_items')
           .select(`
@@ -46,7 +48,11 @@ export const Inventory: React.FC = () => {
           .from('warehouses')
           .select('id, name')
           .eq('owner_id', user.id)
-          .order('name', { ascending: true })
+          .order('name', { ascending: true }),
+        getInventoryRisks().catch(err => {
+          console.error('Error fetching inventory risks:', err);
+          return [];
+        })
       ]);
 
       if (invRes.error) throw invRes.error;
@@ -54,6 +60,7 @@ export const Inventory: React.FC = () => {
 
       setInventory(invRes.data || []);
       setWarehouses(whRes.data || []);
+      setRisks(riskRes || []);
     } catch (e) {
       console.error('Error fetching inventory:', e);
     } finally {
@@ -62,9 +69,16 @@ export const Inventory: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`inventory:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items', filter: `owner_id=eq.${user.id}` }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouses', filter: `owner_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   // Generate clean SKU client-side
@@ -255,6 +269,12 @@ export const Inventory: React.FC = () => {
             const isBusy = busyId === i.id;
             const isLowStock = i.current_stock <= i.reorder_level;
             const isCriticallyLow = i.current_stock <= i.safety_stock;
+            const risk = risks.find((r) => r.warehouse_id === i.warehouse_id);
+            const riskCls =
+              risk?.severity === "critical" ? "bg-destructive/15 text-destructive border-destructive/30" :
+              risk?.severity === "high" ? "bg-warn/15 text-warn-foreground border-warn/40" :
+              risk?.severity === "medium" ? "bg-accent text-accent-foreground border-border" :
+              "bg-surface text-muted-foreground border-border";
 
             return (
               <div 
@@ -276,7 +296,7 @@ export const Inventory: React.FC = () => {
                   <div className="flex items-center gap-1.5">
                     {isCriticallyLow ? (
                       <span className="flex items-center gap-1 text-[11px] font-medium text-destructive">
-                        <AlertTriangle size={12} /> Critical
+                        <AlertTriangle size={12} /> Critical Stock
                       </span>
                     ) : isLowStock ? (
                       <span className="flex items-center gap-1 text-[11px] font-medium text-warn">
@@ -322,6 +342,23 @@ export const Inventory: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Live Risk Section */}
+                {risk && (
+                  <div className="border-t border-border mt-2 pt-2 text-[11px] flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Live Facility Risk:</span>
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${riskCls}`}>
+                        {risk.severity} · {risk.score}
+                      </span>
+                    </div>
+                    {risk.top_headline && (
+                      <div className="text-[10.5px] text-muted-foreground truncate" title={risk.top_headline}>
+                        {risk.top_headline}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex justify-end gap-2 border-t border-border mt-3 pt-3">
                   <button
@@ -348,7 +385,7 @@ export const Inventory: React.FC = () => {
       {/* Add SKU Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[88vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <h3 className="text-[15px] font-display font-medium">Add Inventory SKU</h3>
               <button onClick={() => setShowAddModal(false)} className="text-muted-foreground">
@@ -474,7 +511,7 @@ export const Inventory: React.FC = () => {
       {/* Edit SKU Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[88vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <h3 className="text-[15px] font-display font-medium">Edit Inventory SKU</h3>
               <button onClick={() => setShowEditModal(false)} className="text-muted-foreground">

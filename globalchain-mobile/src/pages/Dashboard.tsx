@@ -94,7 +94,7 @@ export const Dashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     if (!user) return;
-    setLoading(true);
+    if (watchedSuppliers.length === 0 && profiles.length === 0) setLoading(true);
     setFetchErr(null);
 
     try {
@@ -222,9 +222,17 @@ export const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 5000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`dashboard:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers', filter: `owner_id=eq.${user.id}` }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts', filter: `user_id=eq.${user.id}` }, fetchDashboardData)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, isAdmin]);
 
   // Admin: Decide profile request (Approve/Reject)

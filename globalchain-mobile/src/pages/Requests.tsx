@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Check, X, Search, ArrowRightLeft, MessageCircle } from 'lucide-react';
-import { searchOrganizations } from '../lib/server-fns';
+import { searchOrganizations, listOrgProducts, sendTradeRequest } from '../lib/server-fns';
 
 export const Requests: React.FC = () => {
   const { user, profile } = useAuth();
@@ -28,10 +28,30 @@ export const Requests: React.FC = () => {
   const [formBusy, setFormBusy] = useState(false);
   const [prodSearch, setProdSearch] = useState('');
   const [matchingProds, setMatchingProds] = useState<any[]>([]);
+  
+  // Product catalogue states
+  const [products, setProducts] = useState<Array<{ sku: string; name: string; unit: string }>>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [selectedFromSearch, setSelectedFromSearch] = useState(false);
+
+  useEffect(() => {
+    if (selectedFromSearch) {
+      setSelectedFromSearch(false);
+    } else {
+      setProduct('');
+    }
+    setProducts([]);
+    if (!selectedOrg?.id) return;
+    setLoadingProducts(true);
+    listOrgProducts({ org_id: selectedOrg.id })
+      .then((res) => setProducts(res || []))
+      .catch(() => setProducts([]))
+      .finally(() => setLoadingProducts(false));
+  }, [selectedOrg, direction]);
 
   const fetchRequests = async () => {
     if (!user) return;
-    setLoading(true);
+    if (incoming.length === 0 && outgoing.length === 0) setLoading(true);
 
     try {
       // Fetch incoming requests (org joins only, no profile FK joins through auth.users)
@@ -94,9 +114,35 @@ export const Requests: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchRequests();
-    const interval = setInterval(fetchRequests, 5000);
-    return () => clearInterval(interval);
+
+    // Supabase Realtime — instant update when any trade_request changes
+    const channel = supabase
+      .channel(`trade_requests:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trade_requests',
+          filter: `to_user_id=eq.${user.id}`,
+        },
+        () => fetchRequests()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trade_requests',
+          filter: `from_user_id=eq.${user.id}`,
+        },
+        () => fetchRequests()
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   // Respond Accept/Decline — with auto-linking supplier on accept (same as website)
@@ -234,47 +280,27 @@ export const Requests: React.FC = () => {
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profile) return;
+    if (!user) return;
     if (!selectedOrg) {
       setFormErr('Please select a recipient organization.');
+      return;
+    }
+    if (!product.trim()) {
+      setFormErr('Please enter or select a product.');
       return;
     }
     setFormErr(null);
     setFormBusy(true);
 
     try {
-      // 1. Resolve receiver user ID via the org
-      const { data: toUserId, error: rpcErr } = await supabase.rpc('get_user_for_org', {
-        _org_id: selectedOrg.id
+      await sendTradeRequest({
+        to_org_id: selectedOrg.id,
+        direction,
+        product,
+        quantity,
+        category,
+        message,
       });
-      if (rpcErr) throw rpcErr;
-      if (!toUserId) throw new Error('Recipient organization does not have an approved operator.');
-
-      // 2. Resolve sender organization ID
-      const senderNorm = (profile.legal_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const { data: fromOrg } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('name_norm', senderNorm)
-        .maybeSingle();
-
-      // 3. Create request
-      const { error } = await supabase
-        .from('trade_requests')
-        .insert({
-          from_user_id: user.id,
-          from_org_id: fromOrg?.id || null,
-          to_org_id: selectedOrg.id,
-          to_user_id: toUserId,
-          direction,
-          product,
-          quantity,
-          category,
-          message,
-          status: 'pending'
-        });
-
-      if (error) throw error;
       setShowAddModal(false);
       resetForm();
       fetchRequests();
@@ -296,6 +322,8 @@ export const Requests: React.FC = () => {
     setFormErr(null);
     setProdSearch('');
     setMatchingProds([]);
+    setProducts([]);
+    setSelectedFromSearch(false);
   };
 
   const currentList = tab === 'incoming' ? incoming : outgoing;
@@ -422,7 +450,7 @@ export const Requests: React.FC = () => {
       {/* Create Trade Request Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setShowAddModal(false); }}>
-          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+          <div className="bg-card w-full max-w-sm rounded-md border border-border p-5 space-y-4 max-h-[88vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-border pb-2">
               <h3 className="text-[15px] font-display font-medium">New Trade Request</h3>
               <button onClick={() => setShowAddModal(false)} className="text-muted-foreground p-1">
@@ -448,6 +476,7 @@ export const Requests: React.FC = () => {
                         key={idx}
                         type="button"
                         onClick={() => {
+                          setSelectedFromSearch(true);
                           setSelectedOrg({
                             id: p.org_id,
                             display_name: p.company_name,
@@ -549,14 +578,36 @@ export const Requests: React.FC = () => {
               {/* Product */}
               <div>
                 <div className="mono-label mb-1">Product Description</div>
-                <input
-                  type="text"
-                  required
-                  value={product}
-                  onChange={(e) => setProduct(e.target.value)}
-                  placeholder="e.g. Titanium Bolts Grade 5"
-                  className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none"
-                />
+                {direction === 'buy' ? (
+                  <select
+                    value={product}
+                    onChange={(e) => setProduct(e.target.value)}
+                    required
+                    disabled={!selectedOrg || loadingProducts || products.length === 0}
+                    className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none disabled:opacity-60"
+                  >
+                    <option value="">
+                      {loadingProducts ? 'Loading catalogue...' : 
+                       !selectedOrg ? '— select an organisation first —' :
+                       products.length === 0 ? '— no products in catalogue —' : 
+                       '— select a product —'}
+                    </option>
+                    {products.map((p) => (
+                      <option key={p.sku} value={p.name}>
+                        {p.name} ({p.sku})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    value={product}
+                    onChange={(e) => setProduct(e.target.value)}
+                    placeholder="e.g. Titanium Bolts Grade 5"
+                    className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">

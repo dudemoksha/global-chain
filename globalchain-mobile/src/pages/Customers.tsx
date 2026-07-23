@@ -13,7 +13,7 @@ export const Customers: React.FC = () => {
 
   const fetchCustomers = async () => {
     if (!user || !profile) return;
-    setLoading(true);
+    if (customers.length === 0) setLoading(true);
     try {
       // Match website logic: find everyone who has declared MY organization as their supplier
       // Step 1: Find my org by normalized legal_name
@@ -76,9 +76,15 @@ export const Customers: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!user || !profile) return;
     fetchCustomers();
-    const interval = setInterval(fetchCustomers, 5000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`customers:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, fetchCustomers)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, profile]);
 
   const filtered = useMemo(() => {
@@ -220,8 +226,28 @@ function ProposeModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const [prodSearch, setProdSearch] = useState('');
-  const [matchingProds, setMatchingProds] = useState<any[]>([]);
+
+  // Load this user's own inventory SKUs
+  const [mySkus, setMySkus] = useState<any[]>([]);
+  const [loadingSkus, setLoadingSkus] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('inventory_items')
+          .select('id, name, sku, unit, price')
+          .eq('owner_id', userId)
+          .order('name');
+        setMySkus(data || []);
+      } catch (e) {
+        console.error('Error loading my SKUs:', e);
+      } finally {
+        setLoadingSkus(false);
+      }
+    })();
+  }, [userId]);
 
   const searchOrgs = async (q: string) => {
     if (q.trim().length < 2) { setOrgResults([]); return; }
@@ -240,38 +266,18 @@ function ProposeModal({
     }
   };
 
-  const searchProds = async (val: string) => {
-    setProdSearch(val);
-    if (val.trim().length < 2) {
-      setMatchingProds([]);
-      return;
-    }
-    try {
-      const { data, error } = await (supabase as any).rpc('search_products_by_name', {
-        _query: val.trim()
-      });
-      if (!error && data) {
-        setMatchingProds((data || []) as any[]);
-      }
-    } catch (e) {
-      console.error('Error searching products:', e);
-      setMatchingProds([]);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrg) { setErr('Select a customer organisation.'); return; }
-    if (!product.trim()) { setErr('Product is required.'); return; }
+    if (!product.trim()) { setErr('Select a SKU from your inventory.'); return; }
     setBusy(true);
     setErr(null);
     try {
-      // Resolve the target user for this org
       const { data: toUserId, error: rpcErr } = await supabase.rpc('get_user_for_org', {
         _org_id: selectedOrg.id
       });
       if (rpcErr) throw rpcErr;
-      if (!toUserId) throw new Error('That organisation doesn\'t have an approved operator.');
+      if (!toUserId) throw new Error("That organisation doesn't have an approved operator.");
 
       const { error } = await supabase.from('trade_requests').insert({
         from_user_id: userId,
@@ -296,8 +302,8 @@ function ProposeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-[1px] p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-md border border-border bg-background p-5 space-y-4">
+    <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-[1px] flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm rounded-md border border-border bg-background p-5 space-y-4 max-h-[88vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <span className="mono-label">§ Propose to a customer</span>
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground">
@@ -314,60 +320,53 @@ function ProposeModal({
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
-            {/* Product search */}
-            <div className="relative">
-              <div className="mono-label mb-1.5">Search by Product Name (quick setup)</div>
-              <input
-                type="text"
-                placeholder="Type product name (e.g. wood)..."
-                value={prodSearch}
-                onChange={(e) => searchProds(e.target.value)}
-                className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none"
-              />
-              {matchingProds.length > 0 && (
-                <div className="absolute left-0 right-0 z-50 bg-card border border-border rounded mt-1 shadow-lg max-h-48 overflow-y-auto">
-                  {matchingProds.map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setSelectedOrg({
-                          id: p.org_id,
-                          legal_name: p.company_name,
-                          hq_country: p.country,
-                          industry: ''
-                        });
-                        setProduct(p.product_name);
-                        setCategory(p.product_name);
-                        setProdSearch(p.product_name);
-                        setMatchingProds([]);
-                      }}
-                      className="w-full text-left px-3 py-2 text-[12.5px] hover:bg-surface border-b border-border last:border-0"
-                    >
-                      <div className="font-medium">{p.product_name} <span className="text-[10px] text-muted-foreground">({p.sku})</span></div>
-                      <div className="text-[11px] text-muted-foreground">Company: {p.company_name} ({p.country})</div>
-                      <div className="text-[11px] text-primary font-semibold">Rs. {p.price} / {p.unit}</div>
-                    </button>
-                  ))}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Step 1: Pick from YOUR own inventory SKUs */}
+            <div>
+              <div className="mono-label mb-1">Your SKU / Product to offer</div>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Only your own inventory items — you can only offer what you have.
+              </p>
+              {loadingSkus ? (
+                <div className="border border-border rounded px-3 py-2.5 text-[13px] text-muted-foreground">
+                  Loading your inventory…
                 </div>
+              ) : mySkus.length === 0 ? (
+                <div className="border border-destructive/30 bg-destructive/5 rounded px-3 py-2.5 text-[12.5px] text-destructive">
+                  No SKUs in your inventory yet. Add items under <strong>My SKUs</strong> first.
+                </div>
+              ) : (
+                <select
+                  value={product}
+                  onChange={(e) => {
+                    const sku = mySkus.find(s => s.name === e.target.value);
+                    setProduct(e.target.value);
+                    if (sku) setCategory(sku.name);
+                  }}
+                  required
+                  className="w-full border border-border bg-background rounded px-2.5 py-2 text-[13px] outline-none focus:border-foreground"
+                >
+                  <option value="">— select a SKU to offer —</option>
+                  {mySkus.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} ({s.sku}) — {s.unit}{s.price ? ` · Rs.${s.price}` : ''}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
 
-            <div className="flex items-center justify-center py-1">
-              <span className="h-px bg-border flex-1"></span>
-              <span className="mx-2 text-[9px] mono-label text-muted-foreground">OR SELECT MANUALLY</span>
-              <span className="h-px bg-border flex-1"></span>
-            </div>
-
-            {/* Org search */}
+            {/* Step 2: Search for target customer org */}
             <div>
-              <div className="mono-label mb-1.5">Customer organisation</div>
+              <div className="mono-label mb-1">Target customer organisation</div>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Search for the company you want to sell to.
+              </p>
               {selectedOrg ? (
                 <div className="flex items-center justify-between rounded-md border border-input bg-background px-3 py-2.5">
                   <div>
                     <div className="text-[13px] font-medium">{selectedOrg.legal_name}</div>
-                    <div className="text-[11px] text-muted-foreground">{selectedOrg.hq_country}</div>
+                    <div className="text-[11px] text-muted-foreground">{selectedOrg.hq_country} · {selectedOrg.industry}</div>
                   </div>
                   <button type="button" onClick={() => { setSelectedOrg(null); setOrgResults([]); setOrgSearch(''); }} className="text-muted-foreground hover:text-foreground">
                     <X size={14} />
@@ -391,7 +390,7 @@ function ProposeModal({
                           onClick={() => { setSelectedOrg(o); setOrgResults([]); setOrgSearch(''); }}
                         >
                           <div className="text-[13px] font-medium">{o.legal_name}</div>
-                          <div className="text-[11px] text-muted-foreground">{o.hq_country}</div>
+                          <div className="text-[11px] text-muted-foreground">{o.hq_country} · {o.industry}</div>
                         </button>
                       ))}
                     </div>
@@ -400,40 +399,29 @@ function ProposeModal({
               )}
             </div>
 
-            <div>
-              <div className="mono-label mb-1.5">Product / SKU you're offering</div>
-              <input
-                value={product}
-                onChange={e => setProduct(e.target.value)}
-                placeholder="e.g. Grade-A cotton yarn, 25 µm aluminium foil"
-                required
-                className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[13px] outline-none focus:border-foreground"
-              />
-            </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="mono-label mb-1.5">Quantity</div>
+                <div className="mono-label mb-1">Quantity available</div>
                 <input
                   value={quantity}
                   onChange={e => setQuantity(e.target.value)}
                   placeholder="10,000 units"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[13px] outline-none focus:border-foreground"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] outline-none focus:border-foreground"
                 />
               </div>
               <div>
-                <div className="mono-label mb-1.5">Category</div>
+                <div className="mono-label mb-1">Category</div>
                 <input
                   value={category}
                   onChange={e => setCategory(e.target.value)}
                   placeholder="Textiles…"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[13px] outline-none focus:border-foreground"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-[13px] outline-none focus:border-foreground"
                 />
               </div>
             </div>
 
             <div>
-              <div className="mono-label mb-1.5">Message (optional)</div>
+              <div className="mono-label mb-1">Message (optional)</div>
               <textarea
                 rows={3}
                 value={message}
@@ -472,3 +460,4 @@ function ProposeModal({
     </div>
   );
 }
+
