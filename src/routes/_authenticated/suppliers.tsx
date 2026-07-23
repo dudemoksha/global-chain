@@ -18,11 +18,13 @@ import {
 } from "@/lib/trade-requests.functions";
 import { getMyProfile } from "@/lib/profile.functions";
 import { RecommendationsPanel } from "@/components/site/recommendations-panel";
+import { supabase } from "@/integrations/supabase/client";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const listQuery = queryOptions({
   queryKey: ["suppliers", "mine"],
   queryFn: () => listMySuppliers(),
+  refetchInterval: 5000,
 });
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
@@ -375,6 +377,111 @@ export function OrgAutocomplete({
   );
 }
 
+type ProductHit = {
+  sku: string;
+  product_name: string;
+  price: number;
+  unit: string;
+  org_id: string;
+  company_name: string;
+  country: string;
+};
+
+export function ProductAutocomplete({
+  onPick,
+  placeholder = "Search by product name...",
+}: {
+  onPick: (prod: ProductHit) => void;
+  placeholder?: string;
+}) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<ProductHit[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [picked, setPicked] = useState<ProductHit | null>(null);
+
+  useEffect(() => {
+    if (picked && q === picked.product_name) return;
+    if (timer.current) clearTimeout(timer.current);
+    if (q.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    setLoading(true);
+    timer.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc("search_products_by_name", {
+          _query: q.trim(),
+        });
+        if (!error && data) {
+          setHits(data as ProductHit[]);
+          setOpen(true);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, 220);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [q, picked]);
+
+  return (
+    <div className="relative">
+      <input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setPicked(null);
+        }}
+        onFocus={() => hits.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-[14px] outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-foreground"
+      />
+      {open && (hits.length > 0 || loading) && (
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border border-border bg-card shadow-lg">
+          {loading && <div className="px-3 py-2 text-[12px] text-muted-foreground">Searching…</div>}
+          {hits.map((h, i) => (
+            <button
+              key={i}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setPicked(h);
+                setQ(h.product_name);
+                setOpen(false);
+                onPick(h);
+              }}
+              className="block w-full border-b border-border px-3 py-2 text-left last:border-0 hover:bg-surface"
+            >
+              <div className="text-[13.5px] font-medium">{h.product_name} <span className="text-[11.5px] text-muted-foreground">({h.sku})</span></div>
+              <div className="text-[12px] text-muted-foreground">
+                Supplied by: <span className="font-semibold text-foreground">{h.company_name}</span> ({h.country})
+              </div>
+              <div className="mono-label mt-0.5 text-primary">
+                Rs. {h.price} per {h.unit}
+              </div>
+            </button>
+          ))}
+          {!loading && hits.length === 0 && q.trim().length >= 2 && (
+            <div className="px-3 py-3 text-[12.5px] text-muted-foreground">
+              No matching products found.
+            </div>
+          )}
+        </div>
+      )}
+      {picked && (
+        <div className="mt-2 rounded-md border border-primary/30 bg-accent px-3 py-2 text-[12.5px]">
+          Selected Product: <span className="font-medium">{picked.product_name}</span> (Rs. {picked.price} per {picked.unit})<br />
+          Supplier: <span className="font-medium">{picked.company_name}</span> ({picked.country})
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RequestSupplierDialog({
   onClose,
   onSent,
@@ -392,9 +499,14 @@ function RequestSupplierDialog({
   const [message, setMessage] = useState("");
   const [products, setProducts] = useState<Array<{ sku: string; name: string; unit: string }>>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [selectedFromSearch, setSelectedFromSearch] = useState(false);
 
   useEffect(() => {
-    setProduct("");
+    if (selectedFromSearch) {
+      setSelectedFromSearch(false);
+    } else {
+      setProduct("");
+    }
     setProducts([]);
     if (!orgId) return;
     setLoadingProducts(true);
@@ -453,6 +565,24 @@ function RequestSupplierDialog({
           </div>
         ) : (
           <form onSubmit={submit} className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <div className="mono-label mb-1.5">Search by Product Name (quick setup)</div>
+              <ProductAutocomplete
+                onPick={(p) => {
+                  setSelectedFromSearch(true);
+                  setOrgId(p.org_id);
+                  setProduct(p.product_name);
+                  setCategory(p.product_name);
+                }}
+              />
+            </div>
+
+            <div className="sm:col-span-2 flex items-center justify-center">
+              <span className="h-px bg-border flex-1"></span>
+              <span className="mx-3 text-[11px] mono-label text-muted-foreground">OR SELECT MANUALLY</span>
+              <span className="h-px bg-border flex-1"></span>
+            </div>
+
             <div className="sm:col-span-2">
               <div className="mono-label mb-1.5">Supplier organisation</div>
               <OrgAutocomplete onPick={(o) => setOrgId(o.id)} />

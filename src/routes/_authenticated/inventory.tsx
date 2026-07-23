@@ -21,8 +21,8 @@ import {
 } from "@/lib/warehouses.functions";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
-const invQuery = queryOptions({ queryKey: ["inventory"], queryFn: () => listInventory() });
-const whQuery = queryOptions({ queryKey: ["warehouses"], queryFn: () => listWarehouses() });
+const invQuery = queryOptions({ queryKey: ["inventory"], queryFn: () => listInventory(), refetchInterval: 5000 });
+const whQuery = queryOptions({ queryKey: ["warehouses"], queryFn: () => listWarehouses(), refetchInterval: 5000 });
 const riskQuery = queryOptions({
   queryKey: ["inventory-risks"],
   queryFn: () => getInventoryRisks(),
@@ -135,7 +135,7 @@ function InventoryPage() {
           <table className="w-full text-left text-[13.5px]">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                {["SKU", "Item", "Warehouse", "Capacity", "Monthly", "Live risk", ""].map((h) => (
+                {["SKU", "Item", "Warehouse", "Price", "Capacity", "Monthly", "Live risk", ""].map((h) => (
                   <th key={h} className="mono-label px-4 py-2.5">{h}</th>
                 ))}
               </tr>
@@ -143,7 +143,7 @@ function InventoryPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-16 text-center text-muted-foreground">
                     No SKUs recorded. {warehouses.length === 0 && "Add a warehouse first."}
                   </td>
                 </tr>
@@ -163,6 +163,9 @@ function InventoryPage() {
                           </div>
                         </>
                       ) : "—"}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      Rs. {r.price ?? 100} <span className="text-muted-foreground">/ {r.unit}</span>
                     </td>
                     <td className="px-4 py-3 tabular-nums">
                       {r.warehouse_capacity.toLocaleString()}{" "}
@@ -253,6 +256,7 @@ function StatCard({ k, v, emphasis }: { k: string; v: string; emphasis?: boolean
 type SkuValues = {
   name: string; unit: string; warehouse_id: string;
   warehouse_capacity: number; monthly_production: number;
+  price: number;
 };
 
 function SkuForm({
@@ -269,6 +273,7 @@ function SkuForm({
   const [warehouseId, setWarehouseId] = useState(initial?.warehouse_id ?? warehouses[0]?.id ?? "");
   const [capacity, setCapacity] = useState(String(initial?.warehouse_capacity ?? 0));
   const [monthly, setMonthly] = useState(String(initial?.monthly_production ?? 0));
+  const [price, setPrice] = useState(String(initial?.price ?? 100));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 p-4">
@@ -281,6 +286,7 @@ function SkuForm({
             warehouse_id: warehouseId,
             warehouse_capacity: +capacity || 0,
             monthly_production: +monthly || 0,
+            price: +price || 0,
           });
         }}
         className="w-full max-w-lg rounded-md border border-border bg-card p-6"
@@ -329,7 +335,11 @@ function SkuForm({
             </select>
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <label className="block">
+              <span className="mono-label">Price (Rs.)</span>
+              <input type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} className="fld" required />
+            </label>
             <label className="block">
               <span className="mono-label">Warehouse capacity</span>
               <input type="number" min={0} value={capacity} onChange={(e) => setCapacity(e.target.value)} className="fld" />

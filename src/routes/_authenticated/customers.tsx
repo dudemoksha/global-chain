@@ -11,12 +11,13 @@ import {
   listMyCustomers,
   sendTradeRequest,
 } from "@/lib/trade-requests.functions";
-import { OrgAutocomplete } from "./suppliers";
+import { OrgAutocomplete, ProductAutocomplete } from "./suppliers";
 
 const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
 const customersQuery = queryOptions({
   queryKey: ["customers", "mine"],
   queryFn: () => listMyCustomers(),
+  refetchInterval: 5000,
 });
 
 export const Route = createFileRoute("/_authenticated/customers")({
@@ -244,6 +245,23 @@ function ProposeCustomerDialog({
           </div>
         ) : (
           <form onSubmit={submit} className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <div className="mono-label mb-1.5">Search by Product Name (quick setup)</div>
+              <ProductAutocomplete
+                onPick={(p) => {
+                  setOrgId(p.org_id);
+                  setProduct(p.product_name);
+                  setCategory(p.product_name);
+                }}
+              />
+            </div>
+
+            <div className="sm:col-span-2 flex items-center justify-center">
+              <span className="h-px bg-border flex-1"></span>
+              <span className="mx-3 text-[11px] mono-label text-muted-foreground">OR SELECT MANUALLY</span>
+              <span className="h-px bg-border flex-1"></span>
+            </div>
+
             <div className="sm:col-span-2">
               <div className="mono-label mb-1.5">Customer organisation</div>
               <OrgAutocomplete onPick={(o) => setOrgId(o.id)} />

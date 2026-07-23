@@ -21,6 +21,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedFactoriesRouteImport } from './routes/_authenticated/factories'
 import { Route as AuthenticatedGlobeRouteImport } from './routes/_authenticated/globe'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedRequestsRouteImport } from './routes/_authenticated/requests'
 import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
 import { Route as AuthenticatedSimulationRouteImport } from './routes/_authenticated/simulation'
@@ -85,6 +86,11 @@ const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedRequestsRoute = AuthenticatedRequestsRouteImport.update({
   id: '/requests',
   path: '/requests',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/factories': typeof AuthenticatedFactoriesRoute
   '/globe': typeof AuthenticatedGlobeRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/requests': typeof AuthenticatedRequestsRoute
   '/signals': typeof AuthenticatedSignalsRoute
   '/simulation': typeof AuthenticatedSimulationRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/factories': typeof AuthenticatedFactoriesRoute
   '/globe': typeof AuthenticatedGlobeRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/requests': typeof AuthenticatedRequestsRoute
   '/signals': typeof AuthenticatedSignalsRoute
   '/simulation': typeof AuthenticatedSimulationRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/_authenticated/factories': typeof AuthenticatedFactoriesRoute
   '/_authenticated/globe': typeof AuthenticatedGlobeRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/requests': typeof AuthenticatedRequestsRoute
   '/_authenticated/signals': typeof AuthenticatedSignalsRoute
   '/_authenticated/simulation': typeof AuthenticatedSimulationRoute
@@ -173,6 +182,7 @@ export interface FileRouteTypes {
     | '/factories'
     | '/globe'
     | '/inventory'
+    | '/profile'
     | '/requests'
     | '/signals'
     | '/simulation'
@@ -190,6 +200,7 @@ export interface FileRouteTypes {
     | '/factories'
     | '/globe'
     | '/inventory'
+    | '/profile'
     | '/requests'
     | '/signals'
     | '/simulation'
@@ -208,6 +219,7 @@ export interface FileRouteTypes {
     | '/_authenticated/factories'
     | '/_authenticated/globe'
     | '/_authenticated/inventory'
+    | '/_authenticated/profile'
     | '/_authenticated/requests'
     | '/_authenticated/signals'
     | '/_authenticated/simulation'
@@ -307,6 +319,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/requests': {
       id: '/_authenticated/requests'
       path: '/requests'
@@ -347,6 +366,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFactoriesRoute: typeof AuthenticatedFactoriesRoute
   AuthenticatedGlobeRoute: typeof AuthenticatedGlobeRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRequestsRoute: typeof AuthenticatedRequestsRoute
   AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
   AuthenticatedSimulationRoute: typeof AuthenticatedSimulationRoute
@@ -362,6 +382,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFactoriesRoute: AuthenticatedFactoriesRoute,
   AuthenticatedGlobeRoute: AuthenticatedGlobeRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRequestsRoute: AuthenticatedRequestsRoute,
   AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
   AuthenticatedSimulationRoute: AuthenticatedSimulationRoute,

@@ -223,6 +223,8 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 5000);
+    return () => clearInterval(interval);
   }, [user, isAdmin]);
 
   // Admin: Decide profile request (Approve/Reject)

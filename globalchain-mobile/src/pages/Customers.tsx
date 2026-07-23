@@ -77,6 +77,8 @@ export const Customers: React.FC = () => {
 
   useEffect(() => {
     fetchCustomers();
+    const interval = setInterval(fetchCustomers, 5000);
+    return () => clearInterval(interval);
   }, [user, profile]);
 
   const filtered = useMemo(() => {
@@ -218,6 +220,8 @@ function ProposeModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [prodSearch, setProdSearch] = useState('');
+  const [matchingProds, setMatchingProds] = useState<any[]>([]);
 
   const searchOrgs = async (q: string) => {
     if (q.trim().length < 2) { setOrgResults([]); return; }
@@ -233,6 +237,25 @@ function ProposeModal({
     } catch (e) {
       console.error('Error searching organizations:', e);
       setOrgResults([]);
+    }
+  };
+
+  const searchProds = async (val: string) => {
+    setProdSearch(val);
+    if (val.trim().length < 2) {
+      setMatchingProds([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.rpc('search_products_by_name', {
+        _query: val.trim()
+      });
+      if (!error && data) {
+        setMatchingProds(data);
+      }
+    } catch (e) {
+      console.error('Error searching products:', e);
+      setMatchingProds([]);
     }
   };
 
@@ -292,6 +315,51 @@ function ProposeModal({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+            {/* Product search */}
+            <div className="relative">
+              <div className="mono-label mb-1.5">Search by Product Name (quick setup)</div>
+              <input
+                type="text"
+                placeholder="Type product name (e.g. wood)..."
+                value={prodSearch}
+                onChange={(e) => searchProds(e.target.value)}
+                className="w-full border border-border bg-background rounded px-2.5 py-1.5 text-[13px] outline-none"
+              />
+              {matchingProds.length > 0 && (
+                <div className="absolute left-0 right-0 z-50 bg-card border border-border rounded mt-1 shadow-lg max-h-48 overflow-y-auto">
+                  {matchingProds.map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrg({
+                          id: p.org_id,
+                          legal_name: p.company_name,
+                          hq_country: p.country,
+                          industry: ''
+                        });
+                        setProduct(p.product_name);
+                        setCategory(p.product_name);
+                        setProdSearch(p.product_name);
+                        setMatchingProds([]);
+                      }}
+                      className="w-full text-left px-3 py-2 text-[12.5px] hover:bg-surface border-b border-border last:border-0"
+                    >
+                      <div className="font-medium">{p.product_name} <span className="text-[10px] text-muted-foreground">({p.sku})</span></div>
+                      <div className="text-[11px] text-muted-foreground">Company: {p.company_name} ({p.country})</div>
+                      <div className="text-[11px] text-primary font-semibold">Rs. {p.price} / {p.unit}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-center py-1">
+              <span className="h-px bg-border flex-1"></span>
+              <span className="mx-2 text-[9px] mono-label text-muted-foreground">OR SELECT MANUALLY</span>
+              <span className="h-px bg-border flex-1"></span>
+            </div>
+
             {/* Org search */}
             <div>
               <div className="mono-label mb-1.5">Customer organisation</div>

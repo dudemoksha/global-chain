@@ -42,22 +42,26 @@ import { RecommendationsPanel } from "@/components/site/recommendations-panel";
 
 /* ─────────────────────── Query definitions ─────────────────────── */
 
-const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() });
+const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile(), refetchInterval: 5000 });
 const suppliersQuery = queryOptions({
   queryKey: ["suppliers", "mine"],
   queryFn: () => listMySuppliers(),
+  refetchInterval: 5000,
 });
 const graphQuery = queryOptions({
   queryKey: ["suppliers", "graph"],
   queryFn: () => getMySupplyGraph(),
+  refetchInterval: 5000,
 });
 const inventoryQuery = queryOptions({
   queryKey: ["inventory", "mine"],
   queryFn: () => listInventory(),
+  refetchInterval: 5000,
 });
 const factoriesQuery = queryOptions({
   queryKey: ["factories", "mine"],
   queryFn: () => listFactories(),
+  refetchInterval: 5000,
 });
 const adminStatsQuery = queryOptions({
   queryKey: ["admin", "stats"],

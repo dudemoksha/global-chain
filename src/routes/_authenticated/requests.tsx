@@ -17,10 +17,12 @@ const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => getMyProfile() }
 const incomingQuery = queryOptions({
   queryKey: ["requests", "incoming"],
   queryFn: () => listIncomingRequests(),
+  refetchInterval: 5000,
 });
 const outgoingQuery = queryOptions({
   queryKey: ["requests", "outgoing"],
   queryFn: () => listOutgoingRequests(),
+  refetchInterval: 5000,
 });
 
 export const Route = createFileRoute("/_authenticated/requests")({

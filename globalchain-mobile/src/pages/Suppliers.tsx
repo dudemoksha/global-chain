@@ -63,6 +63,8 @@ export const Suppliers: React.FC = () => {
 
   useEffect(() => {
     fetchSuppliersAndWatches();
+    const interval = setInterval(fetchSuppliersAndWatches, 5000);
+    return () => clearInterval(interval);
   }, [user]);
 
   // Toggle Pinned / Watched Status

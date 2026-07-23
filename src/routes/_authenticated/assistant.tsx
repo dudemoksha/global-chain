@@ -265,7 +265,7 @@ function AssistantPage() {
     setErr(null);
     setLoading(true);
     try {
-      const result = await q.fetch(userId, supabaseClient);
+      const result = await q.fetch(userId, supabase);
       setAnswer(result);
     } catch (e) {
       setErr((e as Error).message || "Failed to load data.");

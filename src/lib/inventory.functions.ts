@@ -14,6 +14,7 @@ export type InventoryRow = {
   warehouse_capacity: number;
   monthly_production: number;
   updated_at: string;
+  price: number;
 };
 
 export const listInventory = createServerFn({ method: "GET" })
@@ -23,18 +24,13 @@ export const listInventory = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("inventory_items")
       .select(`
-        id, sku, name, unit, warehouse_id, warehouse_capacity, monthly_production, updated_at,
+        id, sku, name, unit, warehouse_id, warehouse_capacity, monthly_production, updated_at, price,
         warehouses:warehouse_id ( name, country, city )
       `)
       .eq("owner_id", userId)
       .order("name", { ascending: true });
     if (error) throw error;
-    return (data ?? []).map((r: {
-      id: string; sku: string; name: string; unit: string;
-      warehouse_id: string | null;
-      warehouse_capacity: number; monthly_production: number; updated_at: string;
-      warehouses: { name: string; country: string; city: string } | null;
-    }) => ({
+    return (data ?? []).map((r: any) => ({
       id: r.id, sku: r.sku, name: r.name, unit: r.unit,
       warehouse_id: r.warehouse_id,
       warehouse_name: r.warehouses?.name ?? null,
@@ -43,6 +39,7 @@ export const listInventory = createServerFn({ method: "GET" })
       warehouse_capacity: r.warehouse_capacity,
       monthly_production: r.monthly_production,
       updated_at: r.updated_at,
+      price: r.price ?? 100,
     }));
   });
 
@@ -69,6 +66,7 @@ const skuInput = z.object({
   warehouse_id: z.string().uuid(),
   warehouse_capacity: z.number().int().min(0).max(1_000_000_000).default(0),
   monthly_production: z.number().int().min(0).max(1_000_000_000).default(0),
+  price: z.number().min(0).default(100),
 });
 
 export const createInventory = createServerFn({ method: "POST" })
@@ -85,6 +83,7 @@ export const createInventory = createServerFn({ method: "POST" })
       warehouse_id: data.warehouse_id,
       warehouse_capacity: data.warehouse_capacity,
       monthly_production: data.monthly_production,
+      price: data.price,
       // legacy NOT NULL columns
       warehouse: "",
       current_stock: 0,
