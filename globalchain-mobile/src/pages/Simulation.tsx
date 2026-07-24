@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import { Play, ShieldAlert, CheckCircle, Plus, AlertTriangle, X } from 'lucide-react';
 import { recommendAlternatives } from '../lib/server-fns';
+import { useNavigate } from 'react-router-dom';
 
 const KINDS = ['geopolitical', 'climate', 'logistics', 'cyber', 'regulatory'];
 const SEVERITIES = ['medium', 'high', 'critical'];
@@ -24,6 +25,7 @@ export const Simulation: React.FC = () => {
   const [customCountries, setCustomCountries] = useState<string[]>([]);
   const [customCountryInput, setCustomCountryInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Simulation Form States
   const [selCountries, setSelCountries] = useState<string[]>(['Japan', 'China']);
@@ -583,6 +585,22 @@ export const Simulation: React.FC = () => {
                   <p className="text-[10px] font-mono text-destructive font-medium pt-1">
                     Estimated daily financial margin impact: <strong>-Rs. {Math.round(lossEstimate * 0.05).toLocaleString()} / day</strong>
                   </p>
+                  
+                  {affectedNodes.length > 0 && affectedNodes[0].type.toLowerCase().includes('supplier') && (
+                    <button
+                      onClick={() => navigate('/analytics', { 
+                        state: { 
+                          disruptedOrgId: affectedNodes[0].orgId, 
+                          disruptedOrgName: affectedNodes[0].name, 
+                          disruptedProduct: affectedNodes[0].product || affectedNodes[0].category,
+                          avoidCountries: selCountries.join(",") 
+                        } 
+                      })}
+                      className="mt-3 w-full rounded text-center border border-amber-600/30 bg-amber-500/10 hover:bg-amber-500/20 py-2.5 text-[13px] font-medium text-amber-800 transition-colors"
+                    >
+                      Analyze Recovery Cost & Alternatives →
+                    </button>
+                  )}
                 </div>
               </div>
             )}

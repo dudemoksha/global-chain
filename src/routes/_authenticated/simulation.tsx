@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/site/app-shell";
 import { getMyProfile } from "@/lib/profile.functions";
 import { listMySuppliers } from "@/lib/suppliers.functions";
@@ -600,6 +601,19 @@ function SimBody() {
                               Estimated daily financial margin impact: <strong>-Rs. {Math.round(lossEstimate * 0.05).toLocaleString()} / day</strong>
                             </p>
                           </div>
+                          
+                          <Link
+                            to="/analytics"
+                            search={{
+                              disruptedOrgId: o.orgId,
+                              disruptedOrgName: o.orgName,
+                              disruptedProduct: o.product || o.category,
+                              avoidCountries: selCountries.join(",")
+                            }}
+                            className="mt-3 block text-center rounded-md border border-amber-600/30 bg-amber-500/10 hover:bg-amber-500/20 py-2.5 text-[13px] font-medium text-amber-800 transition-colors"
+                          >
+                            Analyze Recovery Cost & Alternatives →
+                          </Link>
                         </div>
 
                         {/* Recommendations — green box */}
